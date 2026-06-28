@@ -28,11 +28,18 @@ _LOGGER = logging.getLogger(__name__)
 
 
 async def _get_data(hass: HomeAssistant) -> PersonStateData:
-    if DOMAIN not in hass.data:
+    # Store the singleton BEFORE the first await. If we awaited async_load()
+    # between the check and the assignment, two entries setting up concurrently
+    # (the normal cold-boot case) would each see "no data", each create their
+    # own PersonStateData, and the last writer would win — stranding the other
+    # entry's engine in an orphaned instance, leaving that person silently
+    # un-augmented. The get-and-set below has no await, so it's atomic.
+    data = hass.data.get(DOMAIN)
+    if data is None:
         data = PersonStateData(hass)
-        await data.async_load()
         hass.data[DOMAIN] = data
-    return hass.data[DOMAIN]
+        await data.async_load()
+    return data
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -55,6 +62,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     @callback
     def _attach(*_: object) -> None:
         entity = get_person_entity(hass, subject.subject_entity_id)
+        _LOGGER.info(
+            "person_state: at_started attach for %s (entity %s)",
+            subject.subject_entity_id,
+            "found" if entity is not None else "MISSING",
+        )
         if entity is None:
             _LOGGER.warning(
                 "subject %s not found; cannot augment it",
