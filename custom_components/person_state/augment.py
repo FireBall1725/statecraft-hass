@@ -97,11 +97,6 @@ def install_augmenter(hass: HomeAssistant) -> None:
     async def _patched_added(self) -> None:
         await orig_added(self)
         engine = _engine_for(self)
-        _LOGGER.warning(
-            "[diag] added_to_hass %s (managed=%s)",
-            getattr(self, "entity_id", "?"),
-            engine is not None,
-        )
         if engine is None:
             return
         try:
@@ -117,7 +112,7 @@ def install_augmenter(hass: HomeAssistant) -> None:
     data.patched = True
     data.orig_update = orig_update
     data.orig_added = orig_added
-    _LOGGER.warning("[diag] augmenter installed (built against %s)", BUILT_AGAINST)
+    _LOGGER.debug("person augmenter installed (built against %s)", BUILT_AGAINST)
 
 
 def remove_augmenter(hass: HomeAssistant) -> None:
@@ -201,8 +196,8 @@ def attach_listeners(hass: HomeAssistant, entity, engine: "StateEngine") -> None
         )
     )
 
-    _LOGGER.warning(
-        "[diag] attached %s, watching %d source entities",
+    _LOGGER.debug(
+        "attached %s, watching %d source entities",
         engine.subject.subject_entity_id,
         len(engine.entities),
     )

@@ -51,14 +51,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await engine.async_build()
     data.engines[subject.subject_entity_id] = engine
 
-    _LOGGER.warning(
-        "[diag] setup_entry %s done: states=%d, data id=%s, engines now=%s",
-        subject.subject_entity_id,
-        len(subject.states),
-        id(data),
-        list(data.engines),
-    )
-
     install_augmenter(hass)
 
     # Attach once the person entity is guaranteed to exist. On a cold boot the
@@ -70,11 +62,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     @callback
     def _attach(*_: object) -> None:
         entity = get_person_entity(hass, subject.subject_entity_id)
-        _LOGGER.warning(
-            "[diag] at_started attach for %s (entity %s), engines=%s",
+        _LOGGER.debug(
+            "attach for %s (entity %s)",
             subject.subject_entity_id,
-            "found" if entity is not None else "MISSING",
-            list(hass.data[DOMAIN].engines) if DOMAIN in hass.data else "no-data",
+            "found" if entity is not None else "missing",
         )
         if entity is None:
             _LOGGER.warning(
