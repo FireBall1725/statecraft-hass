@@ -35,6 +35,9 @@ class PersonStateData:
         self.orig_update: "CALLBACK_TYPE | None" = None
         self.orig_added: "CALLBACK_TYPE | None" = None
 
+        # sidebar panel registration flags (see panel.py)
+        self.panel_flags: dict[str, bool] = {}
+
     async def async_load(self) -> None:
         """Load persisted last-state map."""
         data = await self._store.async_load()

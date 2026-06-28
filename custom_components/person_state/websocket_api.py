@@ -1,0 +1,185 @@
+"""WebSocket API feeding the Person State sidebar panel.
+
+The panel is the primary editor for composite states. It reads the configured
+subjects + their live state, and writes the states list back. Builder rows are
+compiled to native HA conditions here (reusing condition_builder) so the JS
+never duplicates that logic, and every condition is validated before it is
+saved.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import voluptuous as vol
+import yaml
+
+from homeassistant.components import websocket_api
+from homeassistant.config_entries import ConfigEntryState
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import condition
+
+from .condition_builder import compile_condition
+from .const import (
+    CONF_AWAY_FROM,
+    CONF_AWAY_STATE,
+    CONF_CONDITION,
+    CONF_GRACE,
+    CONF_NAME,
+    CONF_PERSIST,
+    CONF_STATES,
+    CONF_SUBJECT,
+    DEFAULT_AWAY_FROM,
+    DEFAULT_AWAY_STATE,
+    DOMAIN,
+    PERSON_DOMAIN,
+)
+
+CONF_BUILDER = "builder"
+B_COMBINE = "combine"
+B_SOURCES = "sources"
+F_MODE = "mode"
+MODE_BUILDER = "builder"
+MODE_YAML = "yaml"
+
+
+@callback
+def async_register_websocket_api(hass: HomeAssistant) -> None:
+    """Register the panel's websocket commands (idempotent at call site)."""
+    websocket_api.async_register_command(hass, ws_list)
+    websocket_api.async_register_command(hass, ws_people)
+    websocket_api.async_register_command(hass, ws_save)
+
+
+def _live(hass: HomeAssistant, subject_entity_id: str) -> dict[str, Any]:
+    state = hass.states.get(subject_entity_id)
+    if state is None:
+        return {"state": None, "attributes": {}}
+    return {"state": state.state, "attributes": dict(state.attributes)}
+
+
+@callback
+@websocket_api.websocket_command({vol.Required("type"): "person_state/list"})
+def ws_list(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return all configured subjects with their states + live status."""
+    subjects = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        merged = {**entry.data, **entry.options}
+        subject_id = merged.get(CONF_SUBJECT)
+        subjects.append(
+            {
+                "entry_id": entry.entry_id,
+                "loaded": entry.state is ConfigEntryState.LOADED,
+                "subject": subject_id,
+                "away_from": merged.get(CONF_AWAY_FROM, DEFAULT_AWAY_FROM),
+                "away_state": merged.get(CONF_AWAY_STATE, DEFAULT_AWAY_STATE),
+                "states": merged.get(CONF_STATES, []),
+                "live": _live(hass, subject_id) if subject_id else {},
+            }
+        )
+    subjects.sort(key=lambda s: s["subject"] or "")
+    connection.send_result(msg["id"], {"subjects": subjects})
+
+
+@callback
+@websocket_api.websocket_command({vol.Required("type"): "person_state/people"})
+def ws_people(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return all person entities (for reference / source pickers)."""
+    people = [
+        {"entity_id": s.entity_id, "name": s.attributes.get("friendly_name", s.entity_id)}
+        for s in hass.states.async_all(PERSON_DOMAIN)
+    ]
+    people.sort(key=lambda p: p["name"])
+    connection.send_result(msg["id"], {"people": people})
+
+
+def _build_state(raw: dict[str, Any]) -> dict[str, Any]:
+    """Turn a panel state payload into the stored state dict (uncompiled check).
+
+    Raises ValueError with a human message on structural problems. Condition
+    validation against HA happens in the async handler.
+    """
+    name = (raw.get(CONF_NAME) or "").strip()
+    if not name:
+        raise ValueError("a state needs a name")
+
+    mode = raw.get(F_MODE, MODE_BUILDER)
+    if mode == MODE_YAML:
+        try:
+            condition_cfg = yaml.safe_load(raw.get("yaml") or "")
+        except yaml.YAMLError as err:
+            raise ValueError(f"{name}: invalid YAML ({err})") from err
+    else:
+        builder = raw.get(CONF_BUILDER) or {}
+        condition_cfg = compile_condition(
+            builder.get(B_COMBINE, "or"), builder.get(B_SOURCES, [])
+        )
+
+    if not condition_cfg:
+        raise ValueError(f"{name}: needs at least one source / a condition")
+
+    state: dict[str, Any] = {CONF_NAME: name, CONF_CONDITION: condition_cfg}
+    if mode == MODE_BUILDER:
+        state[CONF_BUILDER] = raw.get(CONF_BUILDER)
+    if raw.get(CONF_GRACE):
+        state[CONF_GRACE] = raw[CONF_GRACE]
+    if raw.get(CONF_PERSIST):
+        state[CONF_PERSIST] = raw[CONF_PERSIST]
+    return state
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "person_state/save",
+        vol.Required("entry_id"): str,
+        vol.Required(CONF_AWAY_FROM): str,
+        vol.Required(CONF_AWAY_STATE): str,
+        vol.Required(CONF_STATES): [dict],
+    }
+)
+@websocket_api.async_response
+async def ws_save(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Validate and persist a subject's states; the entry reloads on update."""
+    entry = hass.config_entries.async_get_entry(msg["entry_id"])
+    if entry is None or entry.domain != DOMAIN:
+        connection.send_error(msg["id"], "not_found", "unknown config entry")
+        return
+
+    states_out: list[dict[str, Any]] = []
+    for raw in msg[CONF_STATES]:
+        try:
+            state = _build_state(raw)
+            state[CONF_CONDITION] = await condition.async_validate_condition_config(
+                hass, state[CONF_CONDITION]
+            )
+        except (ValueError, vol.Invalid) as err:
+            connection.send_error(msg["id"], "invalid_state", str(err))
+            return
+        except Exception as err:  # noqa: BLE001 - any condition error -> message
+            name = raw.get(CONF_NAME, "?")
+            connection.send_error(
+                msg["id"], "invalid_state", f"{name}: invalid condition ({err})"
+            )
+            return
+        states_out.append(state)
+
+    options = {
+        CONF_AWAY_FROM: msg[CONF_AWAY_FROM],
+        CONF_AWAY_STATE: msg[CONF_AWAY_STATE],
+        CONF_STATES: states_out,
+    }
+    # async_update_entry fires the entry's update listener, which reloads it.
+    hass.config_entries.async_update_entry(entry, options=options)
+    connection.send_result(msg["id"], {"ok": True, "states": states_out})

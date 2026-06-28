@@ -1,7 +1,7 @@
 {
   "domain": "person_state",
   "name": "Person State",
-  "after_dependencies": ["person"],
+  "after_dependencies": ["person", "http", "frontend", "panel_custom", "websocket_api"],
   "codeowners": ["@FireBall1725"],
   "config_flow": true,
   "documentation": "https://github.com/fireball1725/person-state-hass",
@@ -9,5 +9,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/fireball1725/person-state-hass/issues",
   "requirements": [],
-  "version": "0.1.4"
+  "version": "0.2.0"
 }

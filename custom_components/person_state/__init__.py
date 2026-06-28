@@ -23,6 +23,7 @@ from .const import DOMAIN
 from .data import PersonStateData
 from .evaluator import StateEngine
 from .models import parse_subject
+from .panel import async_register_panel, async_unregister_panel
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data.engines[subject.subject_entity_id] = engine
 
     install_augmenter(hass)
+    await async_register_panel(hass)
 
     # Attach once the person entity is guaranteed to exist. On a cold boot the
     # person entity may not be registered when we set up, and patching
@@ -100,6 +102,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     if not data.engines:
         remove_augmenter(hass)
+        async_unregister_panel(hass)
 
     return True
 
