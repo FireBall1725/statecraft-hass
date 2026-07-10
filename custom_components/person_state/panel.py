@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from homeassistant.components import panel_custom
@@ -15,6 +16,24 @@ from .websocket_api import async_register_websocket_api
 PANEL_URL_PATH = "person-state"
 JS_URL = "/person_state_frontend/person-state-panel.js"
 _JS_FILE = Path(__file__).parent / "frontend" / "person-state-panel.js"
+
+
+def _version() -> str:
+    """Integration version, used to cache-bust the panel module URL.
+
+    The static file is served at a fixed path, so without a version query the
+    browser and HA's service worker keep serving the old panel JS across
+    updates even through a hard refresh. Appending ?v=<version> makes every
+    release a fresh URL.
+    """
+    try:
+        return json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
+    except Exception:  # noqa: BLE001 - never let this break panel setup
+        return "0"
+
+
+# Version-stamped URL the frontend imports; the static path itself stays clean.
+MODULE_URL = f"{JS_URL}?v={_version()}"
 
 
 def _flags(hass: HomeAssistant) -> dict[str, bool]:
@@ -56,7 +75,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
                 hass,
                 frontend_url_path=PANEL_URL_PATH,
                 webcomponent_name="person-state-panel",
-                module_url=JS_URL,
+                module_url=MODULE_URL,
                 sidebar_title="Person State",
                 sidebar_icon="mdi:account-cog",
                 require_admin=True,
