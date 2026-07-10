@@ -36,18 +36,11 @@
       },
       "state_meta": {
         "title": "State",
-        "description": "Name the state and choose how to author its condition. Grace and persistence are optional carry-over rules layered on top of the condition.",
+        "description": "Name the state and choose how to author its enter condition. The optional hold condition keeps the state active once entered, while it stays true, even after the enter condition goes false (for example: stay 'sleep' until the door opens). Leave it blank for none.",
         "data": {
           "name": "State name",
           "mode": "Authoring mode",
-          "enable_grace": "Enable open-door grace",
-          "door_entity_id": "Grace door",
-          "open_state": "Door open state",
-          "seconds": "Grace seconds",
-          "enable_persist": "Enable out-of-window persistence",
-          "window_entity_id": "Window helper",
-          "window_off_state": "Window off state",
-          "closed_state": "Door closed state"
+          "hold": "Hold condition (optional, native HA condition)"
         }
       },
       "state_yaml": {

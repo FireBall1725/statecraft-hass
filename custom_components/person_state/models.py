@@ -19,6 +19,7 @@ from .const import (
     CONF_GRACE_DOOR,
     CONF_GRACE_OPEN_STATE,
     CONF_GRACE_SECONDS,
+    CONF_HOLD,
     CONF_NAME,
     CONF_PERSIST,
     CONF_PERSIST_CLOSED_STATE,
@@ -37,32 +38,18 @@ from .const import (
 
 
 @dataclass(frozen=True)
-class GraceModifier:
-    """A door-open trip still counts as this state for `seconds`."""
-
-    door_entity_id: str
-    open_state: str
-    seconds: float
-
-
-@dataclass(frozen=True)
-class PersistModifier:
-    """Stay in this state while a window helper is off and the door is closed."""
-
-    window_entity_id: str
-    window_off_state: str
-    door_entity_id: str
-    closed_state: str
-
-
-@dataclass(frozen=True)
 class StateDef:
-    """One user-defined composite state."""
+    """One user-defined composite state.
+
+    `hold` is an optional native HA condition. Once the state is active, it
+    stays active while `hold` is true even after `condition` (the enter
+    condition) goes false. That is the whole hysteresis story — no built-in
+    notion of doors, windows, or time; the user wires it to their own flow.
+    """
 
     name: str
     condition: dict[str, Any]
-    grace: GraceModifier | None
-    persist: PersistModifier | None
+    hold: dict[str, Any] | None
 
 
 @dataclass(frozen=True)
@@ -75,25 +62,81 @@ class SubjectConfig:
     away_state: str
 
 
-def _parse_grace(raw: dict[str, Any] | None) -> GraceModifier | None:
-    if not raw:
+def _legacy_hold(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """Convert an old grace/persist modifier into an equivalent hold condition.
+
+    Kept so configs written before the generic hold existed keep working. New
+    saves never write grace/persist, so this only runs for pre-existing states.
+    """
+    branches: list[dict[str, Any]] = []
+
+    persist = raw.get(CONF_PERSIST)
+    if persist:
+        # Stayed asleep while the window helper was off and the door closed.
+        branches.append(
+            {
+                "condition": "and",
+                "conditions": [
+                    {
+                        "condition": "state",
+                        "entity_id": persist[CONF_PERSIST_WINDOW],
+                        "state": persist.get(
+                            CONF_PERSIST_WINDOW_OFF, DEFAULT_WINDOW_OFF_STATE
+                        ),
+                    },
+                    {
+                        "condition": "state",
+                        "entity_id": persist[CONF_PERSIST_DOOR],
+                        "state": persist.get(
+                            CONF_PERSIST_CLOSED_STATE, DEFAULT_CLOSED_STATE
+                        ),
+                    },
+                ],
+            }
+        )
+
+    grace = raw.get(CONF_GRACE)
+    if grace:
+        secs = int(float(grace.get(CONF_GRACE_SECONDS, DEFAULT_GRACE_SECONDS)))
+        open_state = grace.get(CONF_GRACE_OPEN_STATE, DEFAULT_OPEN_STATE)
+        # A door-open trip still counts while it has been open less than `secs`:
+        # door is open AND has NOT been open for the full grace window.
+        branches.append(
+            {
+                "condition": "and",
+                "conditions": [
+                    {
+                        "condition": "state",
+                        "entity_id": grace[CONF_GRACE_DOOR],
+                        "state": open_state,
+                    },
+                    {
+                        "condition": "not",
+                        "conditions": [
+                            {
+                                "condition": "state",
+                                "entity_id": grace[CONF_GRACE_DOOR],
+                                "state": open_state,
+                                "for": {"seconds": secs},
+                            }
+                        ],
+                    },
+                ],
+            }
+        )
+
+    if not branches:
         return None
-    return GraceModifier(
-        door_entity_id=raw[CONF_GRACE_DOOR],
-        open_state=raw.get(CONF_GRACE_OPEN_STATE, DEFAULT_OPEN_STATE),
-        seconds=float(raw.get(CONF_GRACE_SECONDS, DEFAULT_GRACE_SECONDS)),
-    )
+    if len(branches) == 1:
+        return branches[0]
+    return {"condition": "or", "conditions": branches}
 
 
-def _parse_persist(raw: dict[str, Any] | None) -> PersistModifier | None:
-    if not raw:
-        return None
-    return PersistModifier(
-        window_entity_id=raw[CONF_PERSIST_WINDOW],
-        window_off_state=raw.get(CONF_PERSIST_WINDOW_OFF, DEFAULT_WINDOW_OFF_STATE),
-        door_entity_id=raw[CONF_PERSIST_DOOR],
-        closed_state=raw.get(CONF_PERSIST_CLOSED_STATE, DEFAULT_CLOSED_STATE),
-    )
+def _parse_hold(raw: dict[str, Any]) -> dict[str, Any] | None:
+    hold = raw.get(CONF_HOLD)
+    if hold:
+        return hold
+    return _legacy_hold(raw)
 
 
 def parse_subject(data: dict[str, Any], options: dict[str, Any]) -> SubjectConfig:
@@ -103,8 +146,7 @@ def parse_subject(data: dict[str, Any], options: dict[str, Any]) -> SubjectConfi
         StateDef(
             name=raw[CONF_NAME],
             condition=raw[CONF_CONDITION],
-            grace=_parse_grace(raw.get(CONF_GRACE)),
-            persist=_parse_persist(raw.get(CONF_PERSIST)),
+            hold=_parse_hold(raw),
         )
         for raw in merged.get(CONF_STATES, [])
     )

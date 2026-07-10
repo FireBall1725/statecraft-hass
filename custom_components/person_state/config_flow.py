@@ -44,24 +44,12 @@ from .const import (
     CONF_AWAY_FROM,
     CONF_AWAY_STATE,
     CONF_CONDITION,
-    CONF_GRACE,
-    CONF_GRACE_DOOR,
-    CONF_GRACE_OPEN_STATE,
-    CONF_GRACE_SECONDS,
+    CONF_HOLD,
     CONF_NAME,
-    CONF_PERSIST,
-    CONF_PERSIST_CLOSED_STATE,
-    CONF_PERSIST_DOOR,
-    CONF_PERSIST_WINDOW,
-    CONF_PERSIST_WINDOW_OFF,
     CONF_STATES,
     CONF_SUBJECT,
     DEFAULT_AWAY_FROM,
     DEFAULT_AWAY_STATE,
-    DEFAULT_CLOSED_STATE,
-    DEFAULT_GRACE_SECONDS,
-    DEFAULT_OPEN_STATE,
-    DEFAULT_WINDOW_OFF_STATE,
     DOMAIN,
     PERSON_DOMAIN,
 )
@@ -77,8 +65,7 @@ B_SOURCES = "sources"
 F_MODE = "mode"
 MODE_BUILDER = "builder"
 MODE_YAML = "yaml"
-F_ENABLE_GRACE = "enable_grace"
-F_ENABLE_PERSIST = "enable_persist"
+F_HOLD = "hold"  # optional native HA condition that latches the state on
 
 _PERSON_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=PERSON_DOMAIN)
@@ -197,8 +184,7 @@ class PersonStateOptionsFlow(OptionsFlow):
             F_MODE: MODE_BUILDER,
             CONF_CONDITION: None,
             CONF_BUILDER: {B_COMBINE: COMBINE_ANY, B_SOURCES: []},
-            CONF_GRACE: None,
-            CONF_PERSIST: None,
+            CONF_HOLD: None,
         }
 
     def _draft_from_state(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -208,8 +194,7 @@ class PersonStateOptionsFlow(OptionsFlow):
             F_MODE: MODE_BUILDER if builder else MODE_YAML,
             CONF_CONDITION: state.get(CONF_CONDITION),
             CONF_BUILDER: builder or {B_COMBINE: COMBINE_ANY, B_SOURCES: []},
-            CONF_GRACE: state.get(CONF_GRACE),
-            CONF_PERSIST: state.get(CONF_PERSIST),
+            CONF_HOLD: state.get(CONF_HOLD),
         }
 
     def _finalize_state(self) -> ConfigFlowResult:
@@ -219,10 +204,8 @@ class PersonStateOptionsFlow(OptionsFlow):
         }
         if self._draft[F_MODE] == MODE_BUILDER:
             state[CONF_BUILDER] = self._draft[CONF_BUILDER]
-        if self._draft.get(CONF_GRACE):
-            state[CONF_GRACE] = self._draft[CONF_GRACE]
-        if self._draft.get(CONF_PERSIST):
-            state[CONF_PERSIST] = self._draft[CONF_PERSIST]
+        if self._draft.get(CONF_HOLD):
+            state[CONF_HOLD] = self._draft[CONF_HOLD]
 
         if self._editing is None:
             self._states.append(state)
@@ -282,74 +265,40 @@ class PersonStateOptionsFlow(OptionsFlow):
     async def async_step_state_meta(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._draft[CONF_NAME] = user_input[CONF_NAME].strip()
-            self._draft[F_MODE] = user_input[F_MODE]
-            self._draft[CONF_GRACE] = (
-                {
-                    CONF_GRACE_DOOR: user_input[CONF_GRACE_DOOR],
-                    CONF_GRACE_OPEN_STATE: user_input[CONF_GRACE_OPEN_STATE],
-                    CONF_GRACE_SECONDS: user_input[CONF_GRACE_SECONDS],
-                }
-                if user_input.get(F_ENABLE_GRACE)
-                else None
-            )
-            self._draft[CONF_PERSIST] = (
-                {
-                    CONF_PERSIST_WINDOW: user_input[CONF_PERSIST_WINDOW],
-                    CONF_PERSIST_WINDOW_OFF: user_input[CONF_PERSIST_WINDOW_OFF],
-                    CONF_PERSIST_DOOR: user_input[CONF_PERSIST_DOOR],
-                    CONF_PERSIST_CLOSED_STATE: user_input[CONF_PERSIST_CLOSED_STATE],
-                }
-                if user_input.get(F_ENABLE_PERSIST)
-                else None
-            )
-            if self._draft[F_MODE] == MODE_YAML:
-                return await self.async_step_state_yaml()
-            return await self.async_step_builder()
+            hold_yaml = (user_input.get(F_HOLD) or "").strip()
+            hold_cfg = None
+            if hold_yaml:
+                try:
+                    hold_cfg = await condition.async_validate_condition_config(
+                        self.hass, yaml.safe_load(hold_yaml)
+                    )
+                except yaml.YAMLError:
+                    errors[F_HOLD] = "invalid_yaml"
+                except Exception:  # noqa: BLE001
+                    errors[F_HOLD] = "invalid_condition"
+            if not errors:
+                self._draft[CONF_NAME] = user_input[CONF_NAME].strip()
+                self._draft[F_MODE] = user_input[F_MODE]
+                self._draft[CONF_HOLD] = hold_cfg
+                if self._draft[F_MODE] == MODE_YAML:
+                    return await self.async_step_state_yaml()
+                return await self.async_step_builder()
 
         return self.async_show_form(
-            step_id="state_meta", data_schema=self._meta_schema()
+            step_id="state_meta", data_schema=self._meta_schema(), errors=errors
         )
 
     def _meta_schema(self) -> vol.Schema:
         d = self._draft
-        grace = d.get(CONF_GRACE) or {}
-        persist = d.get(CONF_PERSIST) or {}
+        hold = d.get(CONF_HOLD)
+        hold_default = yaml.safe_dump(hold, sort_keys=False) if hold else ""
         return vol.Schema(
             {
                 vol.Required(CONF_NAME, default=d.get(CONF_NAME, "")): _TEXT,
                 vol.Required(F_MODE, default=d.get(F_MODE, MODE_BUILDER)): _MODE_FIELD,
-                vol.Optional(F_ENABLE_GRACE, default=bool(grace)): _BOOL,
-                vol.Optional(
-                    CONF_GRACE_DOOR,
-                    default=grace.get(CONF_GRACE_DOOR, vol.UNDEFINED),
-                ): _ANY_ENTITY,
-                vol.Optional(
-                    CONF_GRACE_OPEN_STATE,
-                    default=grace.get(CONF_GRACE_OPEN_STATE, DEFAULT_OPEN_STATE),
-                ): _TEXT,
-                vol.Optional(
-                    CONF_GRACE_SECONDS,
-                    default=grace.get(CONF_GRACE_SECONDS, DEFAULT_GRACE_SECONDS),
-                ): _SECONDS,
-                vol.Optional(F_ENABLE_PERSIST, default=bool(persist)): _BOOL,
-                vol.Optional(
-                    CONF_PERSIST_WINDOW,
-                    default=persist.get(CONF_PERSIST_WINDOW, vol.UNDEFINED),
-                ): _ANY_ENTITY,
-                vol.Optional(
-                    CONF_PERSIST_WINDOW_OFF,
-                    default=persist.get(CONF_PERSIST_WINDOW_OFF, DEFAULT_WINDOW_OFF_STATE),
-                ): _TEXT,
-                vol.Optional(
-                    CONF_PERSIST_DOOR,
-                    default=persist.get(CONF_PERSIST_DOOR, vol.UNDEFINED),
-                ): _ANY_ENTITY,
-                vol.Optional(
-                    CONF_PERSIST_CLOSED_STATE,
-                    default=persist.get(CONF_PERSIST_CLOSED_STATE, DEFAULT_CLOSED_STATE),
-                ): _TEXT,
+                vol.Optional(F_HOLD, default=hold_default): _YAML_FIELD,
             }
         )
 

@@ -14,9 +14,8 @@ from typing import Any
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import condition
-import homeassistant.util.dt as dt_util
 
-from .core import grace_active, persist_active, pick_state
+from .core import pick_state
 from .models import SubjectConfig, collect_for_horizons
 
 _LOGGER = logging.getLogger(__name__)
@@ -48,6 +47,8 @@ class StateEngine:
         self.hass = hass
         self.subject = subject
         self._checkers: dict[str, Any] = {}
+        # one optional "stay latched while true" checker per state
+        self._hold_checkers: dict[str, Any] = {}
         # entities to subscribe to so we re-evaluate on change
         self.entities: set[str] = set()
         # `for:` / grace durations to schedule precise re-evaluations
@@ -77,35 +78,43 @@ class StateEngine:
     async def async_build(self) -> None:
         """Compile condition checkers and collect what to watch."""
         self._checkers.clear()
+        self._hold_checkers.clear()
         self.entities.clear()
         self.for_horizons.clear()
 
         for state_def in self.subject.states:
-            try:
-                self._checkers[state_def.name] = await condition.async_from_config(
-                    self.hass, state_def.condition
+            self._checkers[state_def.name] = await self._compile(
+                state_def.name, "condition", state_def.condition
+            )
+            if state_def.hold is not None:
+                self._hold_checkers[state_def.name] = await self._compile(
+                    state_def.name, "hold", state_def.hold
                 )
-            except Exception as err:  # noqa: BLE001 - surface, do not crash setup
-                _LOGGER.error(
-                    "state %r has an invalid condition, it will never be true: %s",
-                    state_def.name,
-                    err,
-                )
-                self._checkers[state_def.name] = None
 
-            try:
-                self.entities |= condition.async_extract_entities(state_def.condition)
-            except Exception as err:  # noqa: BLE001
-                _LOGGER.debug("could not extract entities for %r: %s", state_def.name, err)
+    async def _compile(self, name: str, kind: str, cfg: dict[str, Any]) -> Any:
+        """Build one condition checker; fold its entities + `for:` horizons in.
 
-            self.for_horizons.extend(collect_for_horizons(state_def.condition))
+        A bad condition returns a None checker (never true) rather than crashing
+        setup — the error is logged so the offending state is obvious.
+        """
+        checker: Any = None
+        try:
+            checker = await condition.async_from_config(self.hass, cfg)
+        except Exception as err:  # noqa: BLE001 - surface, do not crash setup
+            _LOGGER.error(
+                "state %r has an invalid %s condition, it will never be true: %s",
+                name,
+                kind,
+                err,
+            )
 
-            if state_def.grace is not None:
-                self.entities.add(state_def.grace.door_entity_id)
-                self.for_horizons.append(state_def.grace.seconds)
-            if state_def.persist is not None:
-                self.entities.add(state_def.persist.window_entity_id)
-                self.entities.add(state_def.persist.door_entity_id)
+        try:
+            self.entities |= condition.async_extract_entities(cfg)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("could not extract entities for %r %s: %s", name, kind, err)
+
+        self.for_horizons.extend(collect_for_horizons(cfg))
+        return checker
 
     @callback
     def evaluate(
@@ -122,41 +131,15 @@ class StateEngine:
 
     @callback
     def _state_on(self, state_def, previous_state: str | None) -> bool:
+        # Enter: the condition is true right now.
         if _run_checker(self._checkers.get(state_def.name), self.hass):
             return True
-
-        if state_def.grace is not None:
-            door_state, door_age = self._door(state_def.grace.door_entity_id)
-            if grace_active(
-                previous_state,
-                state_def.name,
-                door_state,
-                door_age,
-                state_def.grace.open_state,
-                state_def.grace.seconds,
-            ):
-                return True
-
-        if state_def.persist is not None:
-            if persist_active(
-                previous_state,
-                state_def.name,
-                self._state(state_def.persist.window_entity_id),
-                state_def.persist.window_off_state,
-                self._state(state_def.persist.door_entity_id),
-                state_def.persist.closed_state,
-            ):
-                return True
-
+        # Latch: we were already in this state and the hold condition keeps it
+        # active even though the enter condition has gone false.
+        if (
+            state_def.hold is not None
+            and previous_state == state_def.name
+            and _run_checker(self._hold_checkers.get(state_def.name), self.hass)
+        ):
+            return True
         return False
-
-    def _door(self, entity_id: str) -> tuple[str | None, float | None]:
-        state = self.hass.states.get(entity_id)
-        if state is None:
-            return None, None
-        age = (dt_util.utcnow() - state.last_changed).total_seconds()
-        return state.state, age
-
-    def _state(self, entity_id: str) -> str | None:
-        state = self.hass.states.get(entity_id)
-        return None if state is None else state.state

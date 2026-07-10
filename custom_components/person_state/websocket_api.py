@@ -24,9 +24,9 @@ from .const import (
     CONF_AWAY_FROM,
     CONF_AWAY_STATE,
     CONF_CONDITION,
-    CONF_GRACE,
+    CONF_HOLD,
+    CONF_HOLD_BUILDER,
     CONF_NAME,
-    CONF_PERSIST,
     CONF_STATES,
     CONF_SUBJECT,
     DEFAULT_AWAY_FROM,
@@ -101,6 +101,24 @@ def ws_people(
     connection.send_result(msg["id"], {"people": people})
 
 
+def _compile_block(payload: dict[str, Any], label: str) -> tuple[Any, Any]:
+    """Compile one condition block (builder rows or YAML) from a panel payload.
+
+    Returns (condition_cfg, builder_rows). builder_rows is the raw builder
+    object to stash for UI round-trip in builder mode, else None. condition_cfg
+    may be None when the block is empty (no sources / blank YAML).
+    """
+    mode = payload.get(F_MODE, MODE_BUILDER)
+    if mode == MODE_YAML:
+        try:
+            return yaml.safe_load(payload.get("yaml") or ""), None
+        except yaml.YAMLError as err:
+            raise ValueError(f"{label}: invalid YAML ({err})") from err
+    builder = payload.get(CONF_BUILDER) or {}
+    cfg = compile_condition(builder.get(B_COMBINE, "or"), builder.get(B_SOURCES, []))
+    return cfg, payload.get(CONF_BUILDER)
+
+
 def _build_state(raw: dict[str, Any]) -> dict[str, Any]:
     """Turn a panel state payload into the stored state dict (uncompiled check).
 
@@ -111,28 +129,22 @@ def _build_state(raw: dict[str, Any]) -> dict[str, Any]:
     if not name:
         raise ValueError("a state needs a name")
 
-    mode = raw.get(F_MODE, MODE_BUILDER)
-    if mode == MODE_YAML:
-        try:
-            condition_cfg = yaml.safe_load(raw.get("yaml") or "")
-        except yaml.YAMLError as err:
-            raise ValueError(f"{name}: invalid YAML ({err})") from err
-    else:
-        builder = raw.get(CONF_BUILDER) or {}
-        condition_cfg = compile_condition(
-            builder.get(B_COMBINE, "or"), builder.get(B_SOURCES, [])
-        )
-
+    condition_cfg, enter_builder = _compile_block(raw, name)
     if not condition_cfg:
         raise ValueError(f"{name}: needs at least one source / a condition")
 
     state: dict[str, Any] = {CONF_NAME: name, CONF_CONDITION: condition_cfg}
-    if mode == MODE_BUILDER:
-        state[CONF_BUILDER] = raw.get(CONF_BUILDER)
-    if raw.get(CONF_GRACE):
-        state[CONF_GRACE] = raw[CONF_GRACE]
-    if raw.get(CONF_PERSIST):
-        state[CONF_PERSIST] = raw[CONF_PERSIST]
+    if enter_builder is not None:
+        state[CONF_BUILDER] = enter_builder
+
+    # Optional hold (latch) condition, authored the same way as the enter one.
+    hold_raw = raw.get(CONF_HOLD)
+    if hold_raw:
+        hold_cfg, hold_builder = _compile_block(hold_raw, f"{name} hold")
+        if hold_cfg:  # an enabled-but-empty hold just means "no latch"
+            state[CONF_HOLD] = hold_cfg
+            if hold_builder is not None:
+                state[CONF_HOLD_BUILDER] = hold_builder
     return state
 
 
@@ -164,6 +176,10 @@ async def ws_save(
             state[CONF_CONDITION] = await condition.async_validate_condition_config(
                 hass, state[CONF_CONDITION]
             )
+            if CONF_HOLD in state:
+                state[CONF_HOLD] = await condition.async_validate_condition_config(
+                    hass, state[CONF_HOLD]
+                )
         except (ValueError, vol.Invalid) as err:
             connection.send_error(msg["id"], "invalid_state", str(err))
             return

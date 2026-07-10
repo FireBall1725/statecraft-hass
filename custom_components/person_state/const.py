@@ -19,8 +19,18 @@ CONF_STATES: Final = "states"  # ordered list of state definitions
 # Per-state-definition keys
 CONF_NAME: Final = "name"
 CONF_CONDITION: Final = "condition"  # native HA condition config
-CONF_GRACE: Final = "grace"  # optional hysteresis modifier
-CONF_PERSIST: Final = "persist"  # optional out-of-window persistence modifier
+
+# Latch: once the state is active, it stays active while this native HA
+# condition is true, even after the enter condition goes false. Generic
+# hysteresis — the user points it at whatever their flow needs. Replaces the
+# old door/window-specific grace + persist modifiers.
+CONF_HOLD: Final = "hold"  # compiled hold condition (engine reads this)
+CONF_HOLD_BUILDER: Final = "hold_builder"  # builder rows for the panel round-trip
+
+# Legacy per-state keys, kept only so old stored configs convert to a hold
+# condition on load (see models._legacy_hold). Not written by new saves.
+CONF_GRACE: Final = "grace"
+CONF_PERSIST: Final = "persist"
 
 # Grace modifier keys (door-open trip still counts as the state for a while)
 CONF_GRACE_DOOR: Final = "door_entity_id"
