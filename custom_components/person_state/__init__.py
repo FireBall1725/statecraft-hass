@@ -53,7 +53,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data.engines[subject.subject_entity_id] = engine
 
     install_augmenter(hass)
-    await async_register_panel(hass)
+    # The panel is cosmetic; its registration must never take down the state
+    # engine. If it fails, log and carry on so listeners still attach and the
+    # person keeps re-evaluating (a raise here would abort setup and freeze the
+    # person at its last state, with no source listeners or safety timer).
+    try:
+        await async_register_panel(hass)
+    except Exception:  # noqa: BLE001
+        _LOGGER.exception(
+            "person_state: panel registration failed for %s; the editor panel "
+            "may be unavailable, but state evaluation will continue",
+            subject.subject_entity_id,
+        )
 
     # Attach once the person entity is guaranteed to exist. On a cold boot the
     # person entity may not be registered when we set up, and patching

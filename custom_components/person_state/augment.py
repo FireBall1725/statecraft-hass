@@ -220,22 +220,14 @@ def attach_listeners(hass: HomeAssistant, entity, engine: "StateEngine") -> None
 
     @callback
     def _recompute(*_: object) -> None:
-        # A source-entity change or a timer tick: presence has NOT changed, so
-        # re-run only our cascade. Do not call core's _update_state — it would
-        # recompute and re-publish the plain presence, flapping the state to
-        # "home" for one frame before our cascade overwrites it. Reuse the last
-        # presence we stashed; fall back to the current state on first attach,
-        # before any cascade has run (state is still plain presence then).
-        attrs = getattr(entity, "_attr_extra_state_attributes", None) or {}
-        presence = attrs.get(ATTR_PRESENCE, getattr(entity, "_attr_state", None))
-        previous_state = getattr(entity, "_attr_state", None)
-        try:
-            _apply_cascade(entity, engine, presence, previous_state)
-        except Exception:  # noqa: BLE001
-            _LOGGER.exception(
-                "person_state re-eval failed for %s",
-                getattr(entity, "entity_id", "?"),
-            )
+        # Re-evaluate through core's _update_state. Core recomputes the true
+        # plain presence from the device trackers, then our patched wrapper
+        # runs the cascade on top. We must NOT try to derive presence ourselves
+        # here: on the first run after a restore, _attr_state holds the restored
+        # *composite* state (e.g. "dnd"), and treating that as presence locks
+        # the person into it permanently. Core's intermediate write is
+        # suppressed in _patched_update, so this no longer flaps.
+        entity._update_state()
 
     @callback
     def _source_changed(event: Event) -> None:

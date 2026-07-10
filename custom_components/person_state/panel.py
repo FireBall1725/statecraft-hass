@@ -38,23 +38,34 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         return
 
     if not flags.get("static"):
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(JS_URL, str(_JS_FILE), cache_headers=False)]
-        )
+        try:
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(JS_URL, str(_JS_FILE), cache_headers=False)]
+            )
+        except (RuntimeError, ValueError):
+            # Already registered from an earlier setup whose flags were lost
+            # (e.g. the singleton was recreated after the last entry unloaded,
+            # while the static path stayed registered). Treat as success — the
+            # path is what we wanted anyway.
+            pass
         flags["static"] = True
 
     if not flags.get("panel"):
-        await panel_custom.async_register_panel(
-            hass,
-            frontend_url_path=PANEL_URL_PATH,
-            webcomponent_name="person-state-panel",
-            module_url=JS_URL,
-            sidebar_title="Person State",
-            sidebar_icon="mdi:account-cog",
-            require_admin=True,
-            config={},
-            embed_iframe=False,
-        )
+        try:
+            await panel_custom.async_register_panel(
+                hass,
+                frontend_url_path=PANEL_URL_PATH,
+                webcomponent_name="person-state-panel",
+                module_url=JS_URL,
+                sidebar_title="Person State",
+                sidebar_icon="mdi:account-cog",
+                require_admin=True,
+                config={},
+                embed_iframe=False,
+            )
+        except ValueError:
+            # Panel URL path already registered (same lost-flags case).
+            pass
         flags["panel"] = True
 
 
