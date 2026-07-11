@@ -20,7 +20,7 @@
       },
       "custom": {
         "title": "Create a custom state",
-        "description": "Names a new entity (statecraft.<name>) whose state you define from conditions in the Statecraft panel. The default state is used when no state matches.",
+        "description": "Creates a new entity, for example statecraft.house_state, whose state you define from conditions in the Statecraft panel. The default state is used when no state matches.",
         "data": {
           "scope_name": "Name",
           "default_state": "Default state",
