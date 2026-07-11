@@ -397,27 +397,38 @@ class StatecraftPanel extends HTMLElement {
     return { value: val, pass, pending };
   }
 
-  _dbgChips(builder) {
+  _dbgChips(builder, active) {
     if (!builder.sources.length) return `<span class="dbg-note">no conditions</span>`;
     return builder.sources.map((src) => {
       const r = this._evalRow(src);
       const short = src.entity_id ? (src.entity_id.split(".").slice(1).join(".") || src.entity_id) : "—";
-      const cls = r.missing ? "unk" : r.pass ? "ok" : "no";
-      const mark = r.missing ? "?" : r.pass ? "✓" : "✗";
-      const wait = r.pending != null ? ` · ${r.pending}s left` : "";
-      return `<span class="chip ${cls}" title="${esc(src.entity_id || "no entity")}">${esc(short)} = ${esc(String(r.value))}${wait} ${mark}</span>`;
+      let cls, mark, extra = "";
+      // When the engine already has the state active, a row that doesn't pass
+      // is being held (reboot bridge waiving a for:, or a sensor still coming
+      // back), not failing. Show it amber as "held", not a red ✗.
+      if (r.missing) {
+        cls = active ? "hold" : "unk"; mark = active ? "held" : "?";
+      } else if (r.pending != null) {
+        cls = active ? "hold" : "no";
+        mark = active ? "held" : "✗";
+        extra = ` · ${r.pending}s`;
+      } else {
+        cls = r.pass ? "ok" : "no"; mark = r.pass ? "✓" : "✗";
+      }
+      return `<span class="chip ${cls}" title="${esc(src.entity_id || "no entity")}">${esc(short)} = ${esc(String(r.value))}${extra} ${mark}</span>`;
     }).join("");
   }
 
   _debugBlock(st, live) {
     const attrs = (live && live.attributes) || {};
     const engine = attrs[st.name];
+    const active = engine === true;
     const verdict = engine === true ? "active" : engine === false ? "inactive" : "unknown";
     const enter = st.mode === "builder"
-      ? this._dbgChips(st.builder)
+      ? this._dbgChips(st.builder, active)
       : `<span class="dbg-note">YAML mode — per-row values not shown; see engine verdict</span>`;
     const hold = st.hold && st.hold.mode === "builder"
-      ? `<div class="dbg-line"><span class="dbg-k" title="Only latches once the state is already active">hold</span>${this._dbgChips(st.hold.builder)}</div>`
+      ? `<div class="dbg-line"><span class="dbg-k" title="Only latches once the state is already active">hold</span>${this._dbgChips(st.hold.builder, active)}</div>`
       : "";
     return `
       <div class="dbg">
@@ -674,6 +685,7 @@ class StatecraftPanel extends HTMLElement {
       .chip.ok { color:var(--success-color); background:color-mix(in srgb, var(--success-color) 13%, transparent); }
       .chip.no { color:var(--error-color); background:color-mix(in srgb, var(--error-color) 13%, transparent); }
       .chip.unk { color:var(--secondary-text-color); background:var(--card-background-color); border-color:var(--divider-color); }
+      .chip.hold { color:var(--warning-color,#e0a400); background:color-mix(in srgb, var(--warning-color,#e0a400) 15%, transparent); }
       .btn.add-state { width:100%; margin-bottom:14px; border-style:dashed; }
       .hint { font-size:11.5px; color:var(--secondary-text-color); padding:4px 2px; }
       .empty { text-align:center; color:var(--secondary-text-color); margin-top:40px; line-height:1.7; }
