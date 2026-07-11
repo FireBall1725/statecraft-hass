@@ -1,4 +1,4 @@
-"""Config + options flow for Person State.
+"""Config + options flow for Statecraft.
 
 The config step picks the subject (a person) and the away mapping. The options
 flow is a menu to manage the ordered list of composite states. Each state is
@@ -40,18 +40,27 @@ from .condition_builder import (
     source_label,
     validate_source,
 )
+from homeassistant.util import slugify
+
 from .const import (
     CONF_AWAY_FROM,
     CONF_AWAY_STATE,
     CONF_CONDITION,
+    CONF_DEFAULT_STATE,
     CONF_HOLD,
+    CONF_ICON,
     CONF_NAME,
+    CONF_SCOPE_NAME,
+    CONF_SCOPE_TYPE,
     CONF_STATES,
     CONF_SUBJECT,
     DEFAULT_AWAY_FROM,
     DEFAULT_AWAY_STATE,
+    DEFAULT_STATE,
     DOMAIN,
     PERSON_DOMAIN,
+    SCOPE_CUSTOM,
+    SCOPE_PERSON,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -118,21 +127,30 @@ def _index_options(items: list[dict[str, Any]], label_key: str) -> list[dict[str
     return [{"value": str(i), "label": s[label_key]} for i, s in enumerate(items)]
 
 
-class PersonStateConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Pick the subject; states are added afterwards in options."""
+class StatecraftConfigFlow(ConfigFlow, domain=DOMAIN):
+    """Choose what a scope tracks; states are added afterwards in the panel."""
 
     VERSION = 1
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
+        # Type-first: extend an existing person, or create a custom state entity.
+        return self.async_show_menu(
+            step_id="user", menu_options=[SCOPE_PERSON, SCOPE_CUSTOM]
+        )
+
+    async def async_step_person(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Attach states onto an existing person entity."""
         if user_input is not None:
             subject = user_input[CONF_SUBJECT]
             await self.async_set_unique_id(subject)
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
                 title=subject,
-                data={CONF_SUBJECT: subject},
+                data={CONF_SUBJECT: subject, CONF_SCOPE_TYPE: SCOPE_PERSON},
                 options={
                     CONF_AWAY_FROM: user_input[CONF_AWAY_FROM],
                     CONF_AWAY_STATE: user_input[CONF_AWAY_STATE],
@@ -147,21 +165,64 @@ class PersonStateConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(CONF_AWAY_STATE, default=DEFAULT_AWAY_STATE): _TEXT,
             }
         )
-        return self.async_show_form(step_id="user", data_schema=schema)
+        return self.async_show_form(step_id="person", data_schema=schema)
+
+    async def async_step_custom(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Create a new statecraft.* state entity we own and drive."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            name = (user_input[CONF_SCOPE_NAME] or "").strip()
+            slug = slugify(name)
+            if not slug:
+                errors[CONF_SCOPE_NAME] = "invalid_name"
+            else:
+                subject = f"{DOMAIN}.{slug}"
+                await self.async_set_unique_id(subject)
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=name,
+                    data={
+                        CONF_SUBJECT: subject,
+                        CONF_SCOPE_TYPE: SCOPE_CUSTOM,
+                        CONF_SCOPE_NAME: name,
+                        CONF_ICON: user_input.get(CONF_ICON) or None,
+                    },
+                    options={
+                        CONF_DEFAULT_STATE: (
+                            user_input.get(CONF_DEFAULT_STATE) or DEFAULT_STATE
+                        ),
+                        CONF_STATES: [],
+                    },
+                )
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_SCOPE_NAME, default=""): _TEXT,
+                vol.Required(CONF_DEFAULT_STATE, default=DEFAULT_STATE): _TEXT,
+                vol.Optional(CONF_ICON): selector.IconSelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="custom", data_schema=schema, errors=errors
+        )
 
     @staticmethod
     @callback
     def async_get_options_flow(entry) -> OptionsFlow:
-        return PersonStateOptionsFlow()
+        return StatecraftOptionsFlow()
 
 
-class PersonStateOptionsFlow(OptionsFlow):
+class StatecraftOptionsFlow(OptionsFlow):
     """Menu-driven editing of the subject settings and the state list."""
 
     def __init__(self) -> None:
         self._states: list[dict[str, Any]] = []
         self._away_from: str = DEFAULT_AWAY_FROM
         self._away_state: str = DEFAULT_AWAY_STATE
+        self._default_state: str = DEFAULT_STATE
+        self._scope_type: str = SCOPE_PERSON
         self._loaded = False
         # transient edit state
         self._editing: int | None = None
@@ -173,10 +234,16 @@ class PersonStateOptionsFlow(OptionsFlow):
         if self._loaded:
             return
         opts = self.config_entry.options
+        self._scope_type = self.config_entry.data.get(CONF_SCOPE_TYPE, SCOPE_PERSON)
         self._states = [dict(s) for s in opts.get(CONF_STATES, [])]
         self._away_from = opts.get(CONF_AWAY_FROM, DEFAULT_AWAY_FROM)
         self._away_state = opts.get(CONF_AWAY_STATE, DEFAULT_AWAY_STATE)
+        self._default_state = opts.get(CONF_DEFAULT_STATE, DEFAULT_STATE)
         self._loaded = True
+
+    @property
+    def _is_custom(self) -> bool:
+        return self._scope_type == SCOPE_CUSTOM
 
     def _new_draft(self) -> dict[str, Any]:
         return {
@@ -216,13 +283,15 @@ class PersonStateOptionsFlow(OptionsFlow):
         return None  # caller routes back to init
 
     def _save(self) -> ConfigFlowResult:
-        return self.async_create_entry(
-            data={
+        if self._is_custom:
+            data = {CONF_DEFAULT_STATE: self._default_state, CONF_STATES: self._states}
+        else:
+            data = {
                 CONF_AWAY_FROM: self._away_from,
                 CONF_AWAY_STATE: self._away_state,
                 CONF_STATES: self._states,
             }
-        )
+        return self.async_create_entry(data=data)
 
     # --- menu ---------------------------------------------------------------
     async def async_step_init(
@@ -535,6 +604,15 @@ class PersonStateOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         self._load()
+        if self._is_custom:
+            if user_input is not None:
+                self._default_state = user_input[CONF_DEFAULT_STATE]
+                return await self.async_step_init()
+            schema = vol.Schema(
+                {vol.Required(CONF_DEFAULT_STATE, default=self._default_state): _TEXT}
+            )
+            return self.async_show_form(step_id="settings", data_schema=schema)
+
         if user_input is not None:
             self._away_from = user_input[CONF_AWAY_FROM]
             self._away_state = user_input[CONF_AWAY_STATE]

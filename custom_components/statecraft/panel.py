@@ -1,4 +1,4 @@
-"""Register the Person State sidebar panel, its static JS, and websocket API."""
+"""Register the Statecraft sidebar panel, its static JS, and websocket API."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ from homeassistant.core import HomeAssistant
 from .const import DOMAIN
 from .websocket_api import async_register_websocket_api
 
-PANEL_URL_PATH = "person-state"
-JS_URL = "/person_state_frontend/person-state-panel.js"
-_JS_FILE = Path(__file__).parent / "frontend" / "person-state-panel.js"
+PANEL_URL_PATH = "statecraft"
+JS_URL = "/statecraft_frontend/statecraft-panel.js"
+_JS_FILE = Path(__file__).parent / "frontend" / "statecraft-panel.js"
 
 
 def _version() -> str:
@@ -37,7 +37,7 @@ MODULE_URL = f"{JS_URL}?v={_version()}"
 
 
 def _flags(hass: HomeAssistant) -> dict[str, bool]:
-    """Panel registration flags, stored on the PersonStateData singleton."""
+    """Panel registration flags, stored on the StatecraftData singleton."""
     data = hass.data.get(DOMAIN)
     if data is None:
         return {}
@@ -74,9 +74,9 @@ async def async_register_panel(hass: HomeAssistant) -> None:
             await panel_custom.async_register_panel(
                 hass,
                 frontend_url_path=PANEL_URL_PATH,
-                webcomponent_name="person-state-panel",
+                webcomponent_name="statecraft-panel",
                 module_url=MODULE_URL,
-                sidebar_title="Person State",
+                sidebar_title="Statecraft",
                 sidebar_icon="mdi:account-cog",
                 require_admin=True,
                 config={},

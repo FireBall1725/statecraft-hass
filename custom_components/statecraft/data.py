@@ -1,4 +1,4 @@
-"""Runtime data + persistence for Person State."""
+"""Runtime data + persistence for Statecraft."""
 
 from __future__ import annotations
 
@@ -13,18 +13,21 @@ if TYPE_CHECKING:
     from homeassistant.core import CALLBACK_TYPE
 
     from .augment import RuntimeListeners
+    from .entity import StatecraftScope
     from .evaluator import StateEngine
 
 
-class PersonStateData:
+class StatecraftData:
     """Everything the integration keeps in hass.data[DOMAIN]."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         self._hass = hass
         # subject_entity_id -> compiled engine (one config entry per subject)
         self.engines: dict[str, "StateEngine"] = {}
-        # subject_entity_id -> live listener handles
+        # subject_entity_id -> live listener handles (person scopes)
         self.runtime: dict[str, "RuntimeListeners"] = {}
+        # subject_entity_id -> owned entity (custom scopes)
+        self.custom_entities: dict[str, "StatecraftScope"] = {}
         # last composite state per subject, restored across restarts
         self.last_state: dict[str, str] = {}
 

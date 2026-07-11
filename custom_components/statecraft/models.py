@@ -1,4 +1,4 @@
-"""Data model for Person State, parsed from the config entry.
+"""Data model for Statecraft, parsed from the config entry.
 
 These are plain dataclasses with no Home Assistant runtime dependency so the
 shape is easy to reason about and test. Condition configs are stored as the
@@ -26,6 +26,10 @@ from .const import (
     CONF_PERSIST_DOOR,
     CONF_PERSIST_WINDOW,
     CONF_PERSIST_WINDOW_OFF,
+    CONF_DEFAULT_STATE,
+    CONF_ICON,
+    CONF_SCOPE_NAME,
+    CONF_SCOPE_TYPE,
     CONF_STATES,
     CONF_SUBJECT,
     DEFAULT_AWAY_FROM,
@@ -33,7 +37,9 @@ from .const import (
     DEFAULT_CLOSED_STATE,
     DEFAULT_GRACE_SECONDS,
     DEFAULT_OPEN_STATE,
+    DEFAULT_STATE,
     DEFAULT_WINDOW_OFF_STATE,
+    SCOPE_PERSON,
 )
 
 
@@ -54,12 +60,22 @@ class StateDef:
 
 @dataclass(frozen=True)
 class SubjectConfig:
-    """Everything one config entry manages."""
+    """Everything one config entry (one scope) manages."""
 
     subject_entity_id: str
+    scope_type: str  # SCOPE_PERSON | SCOPE_CUSTOM
     states: tuple[StateDef, ...]  # priority order: first true wins
+    # person scopes fall back to presence -> away; custom scopes have no
+    # presence and fall back to default_state.
     away_from: str
     away_state: str
+    default_state: str
+    name: str | None  # friendly name (custom)
+    icon: str | None  # mdi icon (custom)
+
+    @property
+    def is_custom(self) -> bool:
+        return self.scope_type != SCOPE_PERSON
 
 
 def _legacy_hold(raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -152,9 +168,13 @@ def parse_subject(data: dict[str, Any], options: dict[str, Any]) -> SubjectConfi
     )
     return SubjectConfig(
         subject_entity_id=merged[CONF_SUBJECT],
+        scope_type=merged.get(CONF_SCOPE_TYPE, SCOPE_PERSON),
         states=states,
         away_from=merged.get(CONF_AWAY_FROM, DEFAULT_AWAY_FROM),
         away_state=merged.get(CONF_AWAY_STATE, DEFAULT_AWAY_STATE),
+        default_state=merged.get(CONF_DEFAULT_STATE, DEFAULT_STATE),
+        name=merged.get(CONF_SCOPE_NAME),
+        icon=merged.get(CONF_ICON),
     )
 
 

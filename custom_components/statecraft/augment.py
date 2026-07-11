@@ -27,7 +27,7 @@ from datetime import timedelta
 from .const import ATTR_PRESENCE, DOMAIN, PERSON_DOMAIN, SAFETY_REEVAL_SECONDS
 
 if TYPE_CHECKING:
-    from .data import PersonStateData
+    from .data import StatecraftData
     from .evaluator import StateEngine
 
 _LOGGER = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def _noop() -> None:
     """Swallow a call. Used to suppress core's intermediate state write."""
 
 
-def _data(hass: HomeAssistant) -> "PersonStateData":
+def _data(hass: HomeAssistant) -> "StatecraftData":
     return hass.data[DOMAIN]
 
 
@@ -112,7 +112,7 @@ def install_augmenter(hass: HomeAssistant) -> None:
             _apply_cascade(self, engine, presence, previous_state)
         except Exception:  # noqa: BLE001
             _LOGGER.exception(
-                "person_state cascade failed for %s; left plain presence",
+                "statecraft cascade failed for %s; left plain presence",
                 getattr(self, "entity_id", "?"),
             )
             self.async_write_ha_state()
@@ -126,7 +126,7 @@ def install_augmenter(hass: HomeAssistant) -> None:
             attach_listeners(self.hass, self, engine)
         except Exception:  # noqa: BLE001
             _LOGGER.exception(
-                "person_state failed to attach listeners for %s",
+                "statecraft failed to attach listeners for %s",
                 getattr(self, "entity_id", "?"),
             )
 
@@ -178,7 +178,7 @@ def _apply_cascade(
         if not getattr(engine, "_breaker_logged", False):
             engine._breaker_logged = True
             _LOGGER.error(
-                "person_state: circuit breaker tripped for %s — a feedback loop "
+                "statecraft: circuit breaker tripped for %s — a feedback loop "
                 "is re-triggering the cascade. Watched entities: %s. Leaving "
                 "plain presence; fix the state config and reload to re-enable.",
                 engine.subject.subject_entity_id,

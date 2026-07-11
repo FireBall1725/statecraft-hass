@@ -2,29 +2,49 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add a subject",
-        "description": "Pick the person these states attach to. You'll add the states themselves next, under the integration's Configure menu.",
+        "title": "Add a scope",
+        "description": "What should this scope track?",
+        "menu_options": {
+          "person": "Extend a person (attach states to an existing person)",
+          "custom": "Create a custom state (a new statecraft.* entity)"
+        }
+      },
+      "person": {
+        "title": "Extend a person",
+        "description": "Pick the person these states attach to. You'll define the states themselves in the Statecraft panel.",
         "data": {
           "subject": "Person",
           "away_from": "Presence value treated as away",
           "away_state": "Name for the away state"
         }
+      },
+      "custom": {
+        "title": "Create a custom state",
+        "description": "Names a new entity (statecraft.<name>) whose state you define from conditions in the Statecraft panel. The default state is used when no state matches.",
+        "data": {
+          "scope_name": "Name",
+          "default_state": "Default state",
+          "icon": "Icon"
+        }
       }
     },
+    "error": {
+      "invalid_name": "Enter a name (letters or numbers)."
+    },
     "abort": {
-      "already_configured": "This subject is already managed."
+      "already_configured": "This scope is already configured."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Person State",
+        "title": "Statecraft",
         "description": "States are evaluated top to bottom; the first one that matches wins.",
         "menu_options": {
           "add_state": "Add a state",
           "edit_state": "Edit a state",
           "remove_state": "Remove states",
-          "settings": "Away mapping",
+          "settings": "Fallback state",
           "save": "Save and finish"
         }
       },

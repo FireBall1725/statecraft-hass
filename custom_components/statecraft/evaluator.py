@@ -125,7 +125,11 @@ class StateEngine:
             (sd.name, self._state_on(sd, previous_state)) for sd in self.subject.states
         ]
         state = pick_state(
-            ordered, presence, self.subject.away_from, self.subject.away_state
+            ordered,
+            presence,
+            self.subject.away_from,
+            self.subject.away_state,
+            self.subject.default_state,
         )
         return state, dict(ordered)
 

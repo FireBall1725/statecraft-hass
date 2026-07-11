@@ -1,19 +1,29 @@
-"""Constants for the Person State integration."""
+"""Constants for the Statecraft integration."""
 
 from __future__ import annotations
 
 from typing import Final
 
-DOMAIN: Final = "person_state"
+DOMAIN: Final = "statecraft"
 
 # Core integration we augment. We do not own the person entity; we layer state
 # and attributes onto it. Keep in sync with HA's person component domain.
 PERSON_DOMAIN: Final = "person"
 
 # --- Config entry keys ------------------------------------------------------
-CONF_SUBJECT: Final = "subject"  # entity the states attach to (person.* for now)
-CONF_AWAY_FROM: Final = "away_from"  # presence value treated as "gone"
-CONF_AWAY_STATE: Final = "away_state"  # what to call it
+# A "scope" is one config entry: a subject plus its ordered states. Two kinds:
+#   person -> attach the states onto an existing person.* entity (we wrap core)
+#   custom -> the integration owns a new statecraft.<slug> entity it drives
+CONF_SCOPE_TYPE: Final = "scope_type"
+SCOPE_PERSON: Final = "person"
+SCOPE_CUSTOM: Final = "custom"
+
+CONF_SUBJECT: Final = "subject"  # the entity: person.* (person) or statecraft.* (custom)
+CONF_SCOPE_NAME: Final = "scope_name"  # friendly name for a custom scope
+CONF_ICON: Final = "icon"  # optional mdi icon for a custom scope entity
+CONF_DEFAULT_STATE: Final = "default_state"  # custom fallback when nothing matches
+CONF_AWAY_FROM: Final = "away_from"  # presence value treated as "gone" (person)
+CONF_AWAY_STATE: Final = "away_state"  # what to call it (person)
 CONF_STATES: Final = "states"  # ordered list of state definitions
 
 # Per-state-definition keys
@@ -46,6 +56,8 @@ CONF_PERSIST_CLOSED_STATE: Final = "closed_state"
 # --- Defaults ---------------------------------------------------------------
 DEFAULT_AWAY_FROM: Final = "not_home"
 DEFAULT_AWAY_STATE: Final = "away"
+DEFAULT_STATE: Final = "idle"  # custom scope fallback
+DEFAULT_ICON: Final = "mdi:state-machine"
 DEFAULT_OPEN_STATE: Final = "on"
 DEFAULT_CLOSED_STATE: Final = "off"
 DEFAULT_WINDOW_OFF_STATE: Final = "off"

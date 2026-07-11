@@ -1,4 +1,4 @@
-"""WebSocket API feeding the Person State sidebar panel.
+"""WebSocket API feeding the Statecraft sidebar panel.
 
 The panel is the primary editor for composite states. It reads the configured
 subjects + their live state, and writes the states list back. Builder rows are
@@ -24,15 +24,21 @@ from .const import (
     CONF_AWAY_FROM,
     CONF_AWAY_STATE,
     CONF_CONDITION,
+    CONF_DEFAULT_STATE,
     CONF_HOLD,
     CONF_HOLD_BUILDER,
+    CONF_ICON,
     CONF_NAME,
+    CONF_SCOPE_NAME,
+    CONF_SCOPE_TYPE,
     CONF_STATES,
     CONF_SUBJECT,
     DEFAULT_AWAY_FROM,
     DEFAULT_AWAY_STATE,
+    DEFAULT_STATE,
     DOMAIN,
     PERSON_DOMAIN,
+    SCOPE_PERSON,
 )
 
 CONF_BUILDER = "builder"
@@ -59,7 +65,7 @@ def _live(hass: HomeAssistant, subject_entity_id: str) -> dict[str, Any]:
 
 
 @callback
-@websocket_api.websocket_command({vol.Required("type"): "person_state/list"})
+@websocket_api.websocket_command({vol.Required("type"): "statecraft/list"})
 def ws_list(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -75,8 +81,12 @@ def ws_list(
                 "entry_id": entry.entry_id,
                 "loaded": entry.state is ConfigEntryState.LOADED,
                 "subject": subject_id,
+                "scope_type": merged.get(CONF_SCOPE_TYPE, SCOPE_PERSON),
+                "name": merged.get(CONF_SCOPE_NAME),
+                "icon": merged.get(CONF_ICON),
                 "away_from": merged.get(CONF_AWAY_FROM, DEFAULT_AWAY_FROM),
                 "away_state": merged.get(CONF_AWAY_STATE, DEFAULT_AWAY_STATE),
+                "default_state": merged.get(CONF_DEFAULT_STATE, DEFAULT_STATE),
                 "states": merged.get(CONF_STATES, []),
                 "live": _live(hass, subject_id) if subject_id else {},
             }
@@ -86,7 +96,7 @@ def ws_list(
 
 
 @callback
-@websocket_api.websocket_command({vol.Required("type"): "person_state/people"})
+@websocket_api.websocket_command({vol.Required("type"): "statecraft/people"})
 def ws_people(
     hass: HomeAssistant,
     connection: websocket_api.ActiveConnection,
@@ -150,10 +160,13 @@ def _build_state(raw: dict[str, Any]) -> dict[str, Any]:
 
 @websocket_api.websocket_command(
     {
-        vol.Required("type"): "person_state/save",
+        vol.Required("type"): "statecraft/save",
         vol.Required("entry_id"): str,
-        vol.Required(CONF_AWAY_FROM): str,
-        vol.Required(CONF_AWAY_STATE): str,
+        # Fallback fields differ by scope type; both optional so either kind of
+        # panel payload validates, and we pick the right one from the entry.
+        vol.Optional(CONF_AWAY_FROM): str,
+        vol.Optional(CONF_AWAY_STATE): str,
+        vol.Optional(CONF_DEFAULT_STATE): str,
         vol.Required(CONF_STATES): [dict],
     }
 )
@@ -191,11 +204,12 @@ async def ws_save(
             return
         states_out.append(state)
 
-    options = {
-        CONF_AWAY_FROM: msg[CONF_AWAY_FROM],
-        CONF_AWAY_STATE: msg[CONF_AWAY_STATE],
-        CONF_STATES: states_out,
-    }
+    options: dict[str, Any] = {CONF_STATES: states_out}
+    if entry.data.get(CONF_SCOPE_TYPE, SCOPE_PERSON) == SCOPE_PERSON:
+        options[CONF_AWAY_FROM] = msg.get(CONF_AWAY_FROM, DEFAULT_AWAY_FROM)
+        options[CONF_AWAY_STATE] = msg.get(CONF_AWAY_STATE, DEFAULT_AWAY_STATE)
+    else:
+        options[CONF_DEFAULT_STATE] = msg.get(CONF_DEFAULT_STATE, DEFAULT_STATE)
     # async_update_entry fires the entry's update listener, which reloads it.
     hass.config_entries.async_update_entry(entry, options=options)
     connection.send_result(msg["id"], {"ok": True, "states": states_out})

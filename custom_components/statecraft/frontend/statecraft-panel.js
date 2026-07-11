@@ -1,5 +1,5 @@
-// Person State sidebar panel. Vanilla web component, no build step.
-// Reads/writes composite-state config via the person_state/* websocket
+// Statecraft sidebar panel. Vanilla web component, no build step.
+// Reads/writes composite-state config via the statecraft/* websocket
 // commands and renders an editor that matches the HA look via theme vars.
 
 const esc = (s) =>
@@ -90,7 +90,7 @@ function newSource() {
   return { entity_id: "", kind: KIND_STATE, states: [], negate: false, above: null, below: null, for_seconds: null };
 }
 
-class PersonStatePanel extends HTMLElement {
+class StatecraftPanel extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -144,7 +144,7 @@ class PersonStatePanel extends HTMLElement {
 
   async _load() {
     try {
-      const res = await this._hass.connection.sendMessagePromise({ type: "person_state/list" });
+      const res = await this._hass.connection.sendMessagePromise({ type: "statecraft/list" });
       this._subjects = res.subjects || [];
       if (!this._selected && this._subjects.length) {
         this._selected = this._subjects[0].entry_id;
@@ -165,11 +165,15 @@ class PersonStatePanel extends HTMLElement {
     const cur = this._current();
     if (!cur) { this._draft = null; return; }
     this._draft = {
+      scope_type: cur.scope_type || "person",
       away_from: cur.away_from,
       away_state: cur.away_state,
+      default_state: cur.default_state,
       states: (cur.states || []).map(toEditorState),
     };
   }
+
+  _isCustom() { return this._draft && this._draft.scope_type === "custom"; }
 
   async _save() {
     const cur = this._current();
@@ -177,13 +181,18 @@ class PersonStatePanel extends HTMLElement {
     this._status = "Saving…";
     this.render();
     try {
-      await this._hass.connection.sendMessagePromise({
-        type: "person_state/save",
+      const msg = {
+        type: "statecraft/save",
         entry_id: cur.entry_id,
-        away_from: this._draft.away_from,
-        away_state: this._draft.away_state,
         states: this._draft.states,
-      });
+      };
+      if (this._isCustom()) {
+        msg.default_state = this._draft.default_state;
+      } else {
+        msg.away_from = this._draft.away_from;
+        msg.away_state = this._draft.away_state;
+      }
+      await this._hass.connection.sendMessagePromise(msg);
       this._status = "Saved.";
       await this._load(); // refresh normalized conditions + live state
     } catch (e) {
@@ -231,7 +240,7 @@ class PersonStatePanel extends HTMLElement {
   _html() {
     if (!this._subjects.length) {
       return `<div class="wrap"><div class="empty">No people configured yet.<br>
-        Add one via <b>Settings → Devices &amp; Services → Person State → Add</b>, then return here.</div></div>`;
+        Add one via <b>Settings → Devices &amp; Services → Statecraft → Add</b>, then return here.</div></div>`;
     }
     const cur = this._current();
     const liveNow = this._liveSubject();
@@ -265,7 +274,7 @@ class PersonStatePanel extends HTMLElement {
       ${this._entityDatalist()}
       <div class="layout">
         <aside class="people">
-          <div class="people-title">People</div>
+          <div class="people-title">Scopes</div>
           ${people}
         </aside>
         <main class="detail">${detail}</main>
@@ -273,6 +282,16 @@ class PersonStatePanel extends HTMLElement {
   }
 
   _awayHtml() {
+    if (this._isCustom()) {
+      return `
+        <div class="away">
+          <div class="away-title">Fallback <span class="muted">— the state to report when no state above matches</span></div>
+          <div class="away-grid">
+            <label title="What this entity reports when none of the states match. For example 'idle'.">Default state
+              <input data-field="default_state" type="text" value="${esc(this._draft.default_state ?? "")}"></label>
+          </div>
+        </div>`;
+    }
     return `
       <div class="away">
         <div class="away-title">Fallback <span class="muted">— used when no state above matches</span></div>
@@ -366,7 +385,7 @@ class PersonStatePanel extends HTMLElement {
         <div class="dbg-line">
           <span class="dbg-k">engine</span>
           <span class="chip ${engine ? "ok" : "no"}">${esc(st.name || "state")} = ${verdict}</span>
-          <span class="dbg-note">person is <b>${esc((live && live.state) || "—")}</b></span>
+          <span class="dbg-note">now: <b>${esc((live && live.state) || "—")}</b></span>
         </div>
         <div class="dbg-line"><span class="dbg-k">enter</span>${enter}</div>
         ${hold}
@@ -496,6 +515,7 @@ class PersonStatePanel extends HTMLElement {
     switch (f) {
       case "away_from": d.away_from = val; break;
       case "away_state": d.away_state = val; break;
+      case "default_state": d.default_state = val; break;
       case "name": st.name = val; break;
       case "yaml": if (scope === "hold") st.hold.yaml = val; else st.yaml = val; break;
       case "combine": b.combine = val; break;
@@ -624,4 +644,4 @@ class PersonStatePanel extends HTMLElement {
   }
 }
 
-customElements.define("person-state-panel", PersonStatePanel);
+customElements.define("statecraft-panel", StatecraftPanel);
