@@ -783,8 +783,10 @@ class StatecraftPanel extends HTMLElement {
 
   _css() {
     return `
-      :host { display:block; padding:16px; color:var(--primary-text-color);
+      :host { display:block; padding:16px; box-sizing:border-box; max-width:100%; overflow-x:hidden;
+        color:var(--primary-text-color);
         font-family:var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
+      * { box-sizing:border-box; }
       .wrap { max-width:880px; margin:0 auto; }
       .layout { display:flex; gap:16px; align-items:flex-start; max-width:1120px; margin:0 auto; }
       .people { flex:0 0 240px; display:flex; flex-direction:column; gap:6px;
@@ -856,7 +858,7 @@ class StatecraftPanel extends HTMLElement {
       .group { border:1px solid var(--divider-color); border-left:3px solid var(--primary-color); border-radius:10px; padding:9px 10px; display:flex; flex-direction:column; gap:8px; background:color-mix(in srgb, var(--primary-color) 5%, transparent); }
       .group-head { display:flex; align-items:center; gap:10px; }
       .group-tag { font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--primary-color); font-weight:700; }
-      .summary { font-size:12px; color:var(--secondary-text-color); font-style:italic; margin-top:2px; padding-left:2px; }
+      .summary { font-size:12px; color:var(--secondary-text-color); font-style:italic; margin-top:2px; padding-left:2px; overflow-wrap:anywhere; }
       .hold { margin-top:12px; border-top:1px dashed var(--divider-color); padding-top:10px; }
       .hold-toggle { font-size:13px; }
       .hold-body { margin-top:10px; padding-left:12px; border-left:2px solid var(--primary-color); display:flex; flex-direction:column; gap:8px; }
@@ -884,7 +886,7 @@ class StatecraftPanel extends HTMLElement {
       .chip.no { color:var(--error-color); background:color-mix(in srgb, var(--error-color) 13%, transparent); }
       .chip.unk { color:var(--secondary-text-color); background:var(--card-background-color); border-color:var(--divider-color); }
       .chip.hold { color:var(--warning-color,#e0a400); background:color-mix(in srgb, var(--warning-color,#e0a400) 15%, transparent); }
-      .chip.grp { background:none; border:1px solid var(--divider-color); }
+      .chip.grp { background:none; border:1px solid var(--divider-color); white-space:normal; }
       .chip.grp.ok { border-color:var(--success-color); }
       .chip.grp.no { border-color:var(--error-color); }
       .chip.grp.hold { border-color:var(--warning-color,#e0a400); }
@@ -896,6 +898,18 @@ class StatecraftPanel extends HTMLElement {
         .layout { flex-direction:column; }
         .people { position:static; width:100%; flex:none; }
         .away-grid { grid-template-columns:1fr; }
+        .head { flex-wrap:wrap; }
+        .head .grow { display:none; }
+        .state-head { flex-wrap:wrap; }
+        .name { flex:1 1 100%; order:-1; }
+        .source .ent { flex:1 1 100%; min-width:0; }
+        .source .val { flex:1 1 100%; min-width:0; }
+        .source .attr { flex:1 1 42%; min-width:0; }
+        .source .op { flex:1 1 42%; }
+        .source .for { flex:0 0 66px; width:66px; }
+        .muted-cell { flex:1 1 100%; }
+        .group { padding:8px; }
+        .time-row { flex-wrap:wrap; }
       }
     `;
   }
