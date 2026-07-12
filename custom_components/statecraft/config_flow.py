@@ -30,6 +30,7 @@ from .condition_builder import (
     KIND_NUMERIC,
     KIND_STATE,
     SRC_ABOVE,
+    SRC_ATTRIBUTE,
     SRC_BELOW,
     SRC_ENTITY,
     SRC_FOR,
@@ -135,6 +136,18 @@ def _index_options(
     items: list[dict[str, Any]], label_key: str
 ) -> list[selector.SelectOptionDict]:
     return [_opt(str(i), s[label_key]) for i, s in enumerate(items)]
+
+
+def _flow_editable(src: dict[str, Any]) -> bool:
+    """True if the config-flow source form can edit this row without data loss.
+
+    The form only expresses plain state / numeric rows. Time, group, and
+    attribute-match rows are panel-only; offering them here would rewrite them as
+    bare rows on save, so they are preserved instead of being editable here.
+    """
+    if src.get(SRC_KIND, KIND_STATE) not in (KIND_STATE, KIND_NUMERIC):
+        return False
+    return not src.get(SRC_ATTRIBUTE)
 
 
 class StatecraftConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -421,8 +434,12 @@ class StatecraftOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         sources = self._draft[CONF_BUILDER][B_SOURCES]
         options = ["add_source", "set_combine", "finish_builder"]
+        extra = []
+        if any(_flow_editable(s) for s in sources):
+            extra.append("edit_source")
         if sources:
-            options[1:1] = ["edit_source", "remove_source"]
+            extra.append("remove_source")
+        options[1:1] = extra
         return self.async_show_menu(
             step_id="builder",
             menu_options=options,
@@ -450,9 +467,24 @@ class StatecraftOptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         sources = self._draft[CONF_BUILDER][B_SOURCES]
         if user_input is not None and "index" in user_input:
-            self._editing_source = int(user_input["index"])
+            idx = int(user_input["index"])
+            # Guard: the source form can only express state/numeric rows, so
+            # editing a time/group/attribute row here would silently rewrite it
+            # as a bare row. Only rows this form can round-trip are offered, but
+            # re-check in case of a stale selection.
+            if not _flow_editable(sources[idx]):
+                return await self.async_step_builder()
+            self._editing_source = idx
             return await self.async_step_source_form(None)
-        labels = [_opt(str(i), source_label(s)) for i, s in enumerate(sources)]
+        # Only list rows the config flow can edit without losing data; richer
+        # rows (time, group, attribute match) are edited in the panel.
+        labels = [
+            _opt(str(i), source_label(s))
+            for i, s in enumerate(sources)
+            if _flow_editable(s)
+        ]
+        if not labels:
+            return await self.async_step_builder()
         schema = vol.Schema(
             {
                 vol.Required("index"): selector.SelectSelector(

@@ -132,7 +132,14 @@
       "invalid_condition": "That is not a valid Home Assistant condition.",
       "source_entity": "Pick an entity for this source.",
       "source_states": "Add at least one match state, or switch to a numeric threshold.",
-      "source_bounds": "Set an above and/or below value for a numeric threshold."
+      "source_bounds": "Set an above and/or below value for a numeric threshold.",
+      "source_time": "Set an after and/or before time for a time source."
+    }
+  },
+  "issues": {
+    "person_patch_disabled": {
+      "title": "Statecraft can't attach to the person component",
+      "description": "Statecraft layers composite states onto your person entities by wrapping the core person component (built against {built_against}). That wrapping failed to install, so person scopes are showing plain presence (home / not_home) instead of your composite states. This usually means a Home Assistant update changed the person component. Check for a Statecraft update, then restart Home Assistant. Custom scopes are unaffected."
     }
   }
 }

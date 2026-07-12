@@ -18,13 +18,20 @@ from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
     async_track_time_interval,
 )
 
-from .const import ATTR_PRESENCE, DOMAIN, PERSON_DOMAIN, SAFETY_REEVAL_SECONDS
+from .const import (
+    ATTR_PRESENCE,
+    DOMAIN,
+    ISSUE_PERSON_PATCH,
+    PERSON_DOMAIN,
+    SAFETY_REEVAL_SECONDS,
+)
 
 if TYPE_CHECKING:
     from .data import StatecraftData
@@ -65,6 +72,7 @@ def install_augmenter(hass: HomeAssistant) -> None:
         from homeassistant.components.person import Person  # noqa: PLC0415
     except ImportError:  # pragma: no cover - person is core
         _LOGGER.error("person component not importable; augmenter disabled")
+        _raise_patch_issue(hass)
         return
 
     if not hasattr(Person, "_update_state") or not hasattr(
@@ -75,6 +83,7 @@ def install_augmenter(hass: HomeAssistant) -> None:
             "people will show plain presence",
             BUILT_AGAINST,
         )
+        _raise_patch_issue(hass)
         return
 
     orig_update = Person._update_state
@@ -136,7 +145,22 @@ def install_augmenter(hass: HomeAssistant) -> None:
     data.patched = True
     data.orig_update = orig_update
     data.orig_added = orig_added
+    # Success clears any stale "patch disabled" repair from a prior boot.
+    ir.async_delete_issue(hass, DOMAIN, ISSUE_PERSON_PATCH)
     _LOGGER.debug("person augmenter installed (built against %s)", BUILT_AGAINST)
+
+
+def _raise_patch_issue(hass: HomeAssistant) -> None:
+    """Surface the silent person-patch failure as a visible Repair."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        ISSUE_PERSON_PATCH,
+        is_fixable=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key=ISSUE_PERSON_PATCH,
+        translation_placeholders={"built_against": BUILT_AGAINST},
+    )
 
 
 def remove_augmenter(hass: HomeAssistant) -> None:

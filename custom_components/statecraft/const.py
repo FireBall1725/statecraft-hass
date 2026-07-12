@@ -78,3 +78,9 @@ ATTR_PRESENCE: Final = "presence"  # raw state before the cascade
 # Storage for restoring the last composite state across restarts.
 STORAGE_KEY: Final = f"{DOMAIN}.last_state"
 STORAGE_VERSION: Final = 1
+
+# --- Repairs ----------------------------------------------------------------
+# Raised when the person monkeypatch can't install (core renamed the internals
+# it wraps, or the person component is gone), so person scopes have silently
+# fallen back to plain presence. Turns a one-line log into a visible Repair.
+ISSUE_PERSON_PATCH: Final = "person_patch_disabled"
