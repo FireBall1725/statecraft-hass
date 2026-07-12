@@ -286,8 +286,15 @@ class StatecraftPanel extends HTMLElement {
   // ---- rendering ----------------------------------------------------------
   render() {
     if (!this.shadowRoot) return;
+    // .content is the scroll container; replacing innerHTML resets its scroll to
+    // the top. Preserve it so a live update (debug ticks once a second) doesn't
+    // yank the page back up while the user is reading a scope further down.
+    const prev = this.shadowRoot.querySelector(".content");
+    const scroll = prev ? prev.scrollTop : 0;
     this.shadowRoot.innerHTML = `<style>${this._css()}</style>${this._html()}`;
     this._wire();
+    const next = this.shadowRoot.querySelector(".content");
+    if (next && scroll) next.scrollTop = scroll;
     this._lastSig = this._liveSig();
   }
 
