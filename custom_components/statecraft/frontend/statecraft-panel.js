@@ -152,14 +152,25 @@ class StatecraftPanel extends HTMLElement {
     this._stopDebugTimer();
   }
 
-  // While debug is on, tick once a second so `for:` countdowns decrement even
-  // when no state has changed. Skip the repaint while a field is focused.
+  // While debug is on, tick once a second so `for:` countdowns decrement and
+  // time-window rows flip even when no HA state has changed. This patches only
+  // the debug blocks in place — it never rebuilds the panel — so the scroll
+  // container stays put and the scrollbar doesn't flash.
   _startDebugTimer() {
     if (this._debugTimer) return;
-    this._debugTimer = setInterval(() => {
-      const ae = this.shadowRoot.activeElement;
-      if (!ae || !/^(INPUT|SELECT|TEXTAREA)$/.test(ae.tagName)) this.render();
-    }, 1000);
+    this._debugTimer = setInterval(() => this._refreshDebug(), 1000);
+  }
+
+  _refreshDebug() {
+    if (!this.shadowRoot || !this._draft) return;
+    const slots = this.shadowRoot.querySelectorAll("[data-dbg]");
+    if (!slots.length) return;
+    const cur = this._current();
+    const live = this._liveSubject() || (cur && cur.live ? cur.live : {});
+    slots.forEach((slot) => {
+      const st = this._draft.states[+slot.dataset.dbg];
+      if (st) slot.innerHTML = this._debugInner(st, live);
+    });
   }
 
   _stopDebugTimer() {
@@ -428,7 +439,7 @@ class StatecraftPanel extends HTMLElement {
         ${st.mode === "builder" && st.builder.sources.length ? `<div class="summary" title="Plain-language reading of the rule above">→ ${esc(builderText(st.builder))}</div>` : ""}
 
         ${this._holdHtml(st, i)}
-        ${this._debug ? this._debugBlock(st, live) : ""}
+        ${this._debug ? this._debugBlock(st, live, i) : ""}
       </div>`;
   }
 
@@ -512,7 +523,14 @@ class StatecraftPanel extends HTMLElement {
     return builder.sources.map((n) => this._dbgNodeChip(n, active)).join(joiner);
   }
 
-  _debugBlock(st, live) {
+  // The `data-dbg` slot is a stable wrapper; the timer patches only its inner
+  // HTML each second, so the scroll container is never rebuilt (no scrollbar
+  // flashing) and the page scroll position is untouched.
+  _debugBlock(st, live, i) {
+    return `<div class="dbg" data-dbg="${i}">${this._debugInner(st, live)}</div>`;
+  }
+
+  _debugInner(st, live) {
     const attrs = (live && live.attributes) || {};
     const engine = attrs[st.name];
     const active = engine === true;
@@ -524,15 +542,13 @@ class StatecraftPanel extends HTMLElement {
       ? `<div class="dbg-line"><span class="dbg-k" title="Only latches once the state is already active">hold</span>${this._dbgChips(st.hold.builder, active)}</div>`
       : "";
     return `
-      <div class="dbg">
         <div class="dbg-line">
           <span class="dbg-k">engine</span>
           <span class="chip ${engine ? "ok" : "no"}">${esc(st.name || "state")} = ${verdict}</span>
           <span class="dbg-note">now: <b>${esc((live && live.state) || "—")}</b></span>
         </div>
         <div class="dbg-line"><span class="dbg-k">enter</span>${enter}</div>
-        ${hold}
-      </div>`;
+        ${hold}`;
   }
 
   _holdHtml(st, i) {
