@@ -14,15 +14,15 @@ Pinned against the HA person component as of BUILT_AGAINST; re-test on upgrades.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_state_change_event,
     async_track_time_interval,
 )
-from datetime import timedelta
 
 from .const import ATTR_PRESENCE, DOMAIN, PERSON_DOMAIN, SAFETY_REEVAL_SECONDS
 
@@ -41,11 +41,11 @@ def _noop() -> None:
     """Swallow a call. Used to suppress core's intermediate state write."""
 
 
-def _data(hass: HomeAssistant) -> "StatecraftData":
+def _data(hass: HomeAssistant) -> StatecraftData:
     return hass.data[DOMAIN]
 
 
-def _engine_for(entity) -> "StateEngine | None":
+def _engine_for(entity) -> StateEngine | None:
     """Return the engine for this person entity, or None if unmanaged."""
     hass = getattr(entity, "hass", None)
     entity_id = getattr(entity, "entity_id", None)
@@ -62,7 +62,7 @@ def install_augmenter(hass: HomeAssistant) -> None:
         return
 
     try:
-        from homeassistant.components.person import Person
+        from homeassistant.components.person import Person  # noqa: PLC0415
     except ImportError:  # pragma: no cover - person is core
         _LOGGER.error("person component not importable; augmenter disabled")
         return
@@ -130,8 +130,9 @@ def install_augmenter(hass: HomeAssistant) -> None:
                 getattr(self, "entity_id", "?"),
             )
 
-    Person._update_state = _patched_update
-    Person.async_added_to_hass = _patched_added
+    # Monkeypatching core methods is the whole point; mypy can't model it.
+    Person._update_state = _patched_update  # type: ignore[method-assign]
+    Person.async_added_to_hass = _patched_added  # type: ignore[method-assign]
     data.patched = True
     data.orig_update = orig_update
     data.orig_added = orig_added
@@ -144,12 +145,12 @@ def remove_augmenter(hass: HomeAssistant) -> None:
     if not data.patched:
         return
     try:
-        from homeassistant.components.person import Person
+        from homeassistant.components.person import Person  # noqa: PLC0415
 
         if data.orig_update is not None:
-            Person._update_state = data.orig_update
+            Person._update_state = data.orig_update  # type: ignore[method-assign]
         if data.orig_added is not None:
-            Person.async_added_to_hass = data.orig_added
+            Person.async_added_to_hass = data.orig_added  # type: ignore[method-assign]
     except ImportError:  # pragma: no cover
         pass
     data.patched = False
@@ -160,7 +161,7 @@ def remove_augmenter(hass: HomeAssistant) -> None:
 # --- cascade application ----------------------------------------------------
 @callback
 def _apply_cascade(
-    entity, engine: "StateEngine", presence: str | None, previous_state: str | None
+    entity, engine: StateEngine, presence: str | None, previous_state: str | None
 ) -> None:
     """Override the plain presence with the composite state + attrs.
 
@@ -216,7 +217,7 @@ def _apply_cascade(
 
 
 # --- listeners --------------------------------------------------------------
-def attach_listeners(hass: HomeAssistant, entity, engine: "StateEngine") -> None:
+def attach_listeners(hass: HomeAssistant, entity, engine: StateEngine) -> None:
     """Wire up source + timer triggers for one subject.
 
     Presence changes are already handled: core recomputes the person on tracker
@@ -252,14 +253,10 @@ def attach_listeners(hass: HomeAssistant, entity, engine: "StateEngine") -> None
     # re-triggers the cascade — a tight feedback loop that hangs HA. The
     # subject's real changes still come through core's tracker path (the patched
     # _update_state), so excluding it here loses nothing.
-    watched = [
-        e for e in engine.entities if e != engine.subject.subject_entity_id
-    ]
+    watched = [e for e in engine.entities if e != engine.subject.subject_entity_id]
 
     if watched:
-        runtime.unsubs.append(
-            async_track_state_change_event(hass, watched, _recompute)
-        )
+        runtime.unsubs.append(async_track_state_change_event(hass, watched, _recompute))
 
     # slow safety net so anything we failed to schedule precisely still converges
     runtime.unsubs.append(
@@ -299,7 +296,7 @@ class RuntimeListeners:
 
 def get_person_entity(hass: HomeAssistant, entity_id: str):
     """Return the live core Person entity instance, or None if not loaded yet."""
-    from homeassistant.helpers.entity_component import DATA_INSTANCES
+    from homeassistant.helpers.entity_component import DATA_INSTANCES  # noqa: PLC0415
 
     component = hass.data.get(DATA_INSTANCES, {}).get(PERSON_DOMAIN)
     if component is None:

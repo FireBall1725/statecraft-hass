@@ -1,0 +1,12 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+src = ["custom_components"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "PL"]
+ignore = ["PLR0913", "PLR2004"]
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true

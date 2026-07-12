@@ -19,10 +19,10 @@ from typing import Any
 
 import voluptuous as vol
 import yaml
-
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
 from homeassistant.helpers import condition, selector
+from homeassistant.util import slugify
 
 from .condition_builder import (
     COMBINE_ALL,
@@ -40,8 +40,6 @@ from .condition_builder import (
     source_label,
     validate_source,
 )
-from homeassistant.util import slugify
-
 from .const import (
     CONF_AWAY_FROM,
     CONF_AWAY_STATE,
@@ -76,6 +74,12 @@ MODE_BUILDER = "builder"
 MODE_YAML = "yaml"
 F_HOLD = "hold"  # optional native HA condition that latches the state on
 
+
+def _opt(value: str, label: str) -> selector.SelectOptionDict:
+    """A typed select option (HA wants SelectOptionDict, not a plain dict)."""
+    return selector.SelectOptionDict(value=value, label=label)
+
+
 _PERSON_SELECTOR = selector.EntitySelector(
     selector.EntitySelectorConfig(domain=PERSON_DOMAIN)
 )
@@ -85,11 +89,15 @@ _YAML_FIELD = selector.TextSelector(selector.TextSelectorConfig(multiline=True))
 _BOOL = selector.BooleanSelector()
 _SECONDS = selector.NumberSelector(
     selector.NumberSelectorConfig(
-        min=0, max=86400, step=10, unit_of_measurement="s", mode="box"
+        min=0,
+        max=86400,
+        step=10,
+        unit_of_measurement="s",
+        mode=selector.NumberSelectorMode.BOX,
     )
 )
 _NUMBER = selector.NumberSelector(
-    selector.NumberSelectorConfig(step="any", mode="box")
+    selector.NumberSelectorConfig(step="any", mode=selector.NumberSelectorMode.BOX)
 )
 _STATES_FIELD = selector.SelectSelector(
     selector.SelectSelectorConfig(options=[], multiple=True, custom_value=True)
@@ -97,8 +105,8 @@ _STATES_FIELD = selector.SelectSelector(
 _MODE_FIELD = selector.SelectSelector(
     selector.SelectSelectorConfig(
         options=[
-            {"value": MODE_BUILDER, "label": "Builder"},
-            {"value": MODE_YAML, "label": "YAML"},
+            _opt(MODE_BUILDER, "Builder"),
+            _opt(MODE_YAML, "YAML"),
         ],
         mode=selector.SelectSelectorMode.LIST,
     )
@@ -106,8 +114,8 @@ _MODE_FIELD = selector.SelectSelector(
 _KIND_FIELD = selector.SelectSelector(
     selector.SelectSelectorConfig(
         options=[
-            {"value": KIND_STATE, "label": "State match"},
-            {"value": KIND_NUMERIC, "label": "Numeric threshold"},
+            _opt(KIND_STATE, "State match"),
+            _opt(KIND_NUMERIC, "Numeric threshold"),
         ],
         mode=selector.SelectSelectorMode.LIST,
     )
@@ -115,16 +123,18 @@ _KIND_FIELD = selector.SelectSelector(
 _COMBINE_FIELD = selector.SelectSelector(
     selector.SelectSelectorConfig(
         options=[
-            {"value": COMBINE_ANY, "label": "Any source active (OR)"},
-            {"value": COMBINE_ALL, "label": "All sources active (AND)"},
+            _opt(COMBINE_ANY, "Any source active (OR)"),
+            _opt(COMBINE_ALL, "All sources active (AND)"),
         ],
         mode=selector.SelectSelectorMode.LIST,
     )
 )
 
 
-def _index_options(items: list[dict[str, Any]], label_key: str) -> list[dict[str, str]]:
-    return [{"value": str(i), "label": s[label_key]} for i, s in enumerate(items)]
+def _index_options(
+    items: list[dict[str, Any]], label_key: str
+) -> list[selector.SelectOptionDict]:
+    return [_opt(str(i), s[label_key]) for i, s in enumerate(items)]
 
 
 class StatecraftConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -204,9 +214,7 @@ class StatecraftConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Optional(CONF_ICON): selector.IconSelector(),
             }
         )
-        return self.async_show_form(
-            step_id="custom", data_schema=schema, errors=errors
-        )
+        return self.async_show_form(step_id="custom", data_schema=schema, errors=errors)
 
     @staticmethod
     @callback
@@ -264,7 +272,7 @@ class StatecraftOptionsFlow(OptionsFlow):
             CONF_HOLD: state.get(CONF_HOLD),
         }
 
-    def _finalize_state(self) -> ConfigFlowResult:
+    def _finalize_state(self) -> None:
         state: dict[str, Any] = {
             CONF_NAME: self._draft[CONF_NAME],
             CONF_CONDITION: self._draft[CONF_CONDITION],
@@ -280,7 +288,7 @@ class StatecraftOptionsFlow(OptionsFlow):
             self._states[self._editing] = state
         self._draft = {}
         self._editing = None
-        return None  # caller routes back to init
+        # caller routes back to init
 
     def _save(self) -> ConfigFlowResult:
         if self._is_custom:
@@ -383,12 +391,15 @@ class StatecraftOptionsFlow(OptionsFlow):
             except yaml.YAMLError:
                 errors[CONF_CONDITION] = "invalid_yaml"
             if not errors:
-                try:
-                    parsed = await condition.async_validate_condition_config(
-                        self.hass, parsed
-                    )
-                except Exception:  # noqa: BLE001
+                if parsed is None:
                     errors[CONF_CONDITION] = "invalid_condition"
+                else:
+                    try:
+                        parsed = await condition.async_validate_condition_config(
+                            self.hass, parsed
+                        )
+                    except Exception:  # noqa: BLE001
+                        errors[CONF_CONDITION] = "invalid_condition"
             if not errors:
                 self._draft[CONF_CONDITION] = parsed
                 self._draft[F_MODE] = MODE_YAML
@@ -441,9 +452,7 @@ class StatecraftOptionsFlow(OptionsFlow):
         if user_input is not None and "index" in user_input:
             self._editing_source = int(user_input["index"])
             return await self.async_step_source_form(None)
-        labels = [
-            {"value": str(i), "label": source_label(s)} for i, s in enumerate(sources)
-        ]
+        labels = [_opt(str(i), source_label(s)) for i, s in enumerate(sources)]
         schema = vol.Schema(
             {
                 vol.Required("index"): selector.SelectSelector(
@@ -506,9 +515,7 @@ class StatecraftOptionsFlow(OptionsFlow):
                 vol.Optional(
                     SRC_STATES, default=current.get(SRC_STATES, [])
                 ): _STATES_FIELD,
-                vol.Optional(
-                    SRC_NEGATE, default=current.get(SRC_NEGATE, False)
-                ): _BOOL,
+                vol.Optional(SRC_NEGATE, default=current.get(SRC_NEGATE, False)): _BOOL,
                 vol.Optional(
                     SRC_ABOVE, default=current.get(SRC_ABOVE, vol.UNDEFINED)
                 ): _NUMBER,
@@ -546,9 +553,7 @@ class StatecraftOptionsFlow(OptionsFlow):
                 s for i, s in enumerate(sources) if i not in drop
             ]
             return await self.async_step_builder()
-        labels = [
-            {"value": str(i), "label": source_label(s)} for i, s in enumerate(sources)
-        ]
+        labels = [_opt(str(i), source_label(s)) for i, s in enumerate(sources)]
         schema = vol.Schema(
             {
                 vol.Required("indexes", default=[]): selector.SelectSelector(

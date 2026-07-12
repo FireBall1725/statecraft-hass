@@ -102,7 +102,7 @@ def _short_time(value: Any) -> Any:
 
 
 # --- compile: node -> HA condition -----------------------------------------
-def compile_node(node: dict[str, Any]) -> dict[str, Any] | None:
+def compile_node(node: dict[str, Any]) -> dict[str, Any] | None:  # noqa: PLR0912
     """Compile one builder node into a native HA condition dict (or None)."""
     kind = node.get(SRC_KIND, KIND_STATE)
 
@@ -231,7 +231,7 @@ def _leaf_time(cfg: dict[str, Any]) -> dict[str, Any]:
     return node
 
 
-def decompile_node(cfg: Any) -> dict[str, Any] | None:
+def decompile_node(cfg: Any) -> dict[str, Any] | None:  # noqa: PLR0911, PLR0912
     """Turn one HA condition into a builder node, or None if unrepresentable."""
     if not isinstance(cfg, dict):
         return None
@@ -322,7 +322,11 @@ def validate_source(src: dict[str, Any]) -> str | None:
         return "source_entity"
     if kind == KIND_STATE and not src.get(SRC_STATES):
         return "source_states"
-    if kind == KIND_NUMERIC and src.get(SRC_ABOVE) is None and src.get(SRC_BELOW) is None:
+    if (
+        kind == KIND_NUMERIC
+        and src.get(SRC_ABOVE) is None
+        and src.get(SRC_BELOW) is None
+    ):
         return "source_bounds"
     return None
 
@@ -338,7 +342,9 @@ def source_label(src: dict[str, Any]) -> str:
             bits.append(f"before {src[SRC_BEFORE]}")
         return "time: " + (" ".join(bits) or "any")
     if kind == KIND_GROUP:
-        return f"group ({src.get(G_COMBINE, COMBINE_ANY)}, {len(src.get(G_SOURCES, []))})"
+        return (
+            f"group ({src.get(G_COMBINE, COMBINE_ANY)}, {len(src.get(G_SOURCES, []))})"
+        )
     entity_id = src.get(SRC_ENTITY, "?")
     attr = f".{src[SRC_ATTRIBUTE]}" if src.get(SRC_ATTRIBUTE) else ""
     if kind == KIND_NUMERIC:

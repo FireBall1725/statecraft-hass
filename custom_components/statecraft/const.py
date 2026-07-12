@@ -18,7 +18,9 @@ CONF_SCOPE_TYPE: Final = "scope_type"
 SCOPE_PERSON: Final = "person"
 SCOPE_CUSTOM: Final = "custom"
 
-CONF_SUBJECT: Final = "subject"  # the entity: person.* (person) or statecraft.* (custom)
+CONF_SUBJECT: Final = (
+    "subject"  # the entity: person.* (person) or statecraft.* (custom)
+)
 CONF_SCOPE_NAME: Final = "scope_name"  # friendly name for a custom scope
 CONF_ICON: Final = "icon"  # optional mdi icon for a custom scope entity
 CONF_DEFAULT_STATE: Final = "default_state"  # custom fallback when nothing matches

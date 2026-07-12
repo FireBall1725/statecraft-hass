@@ -12,9 +12,9 @@ import time
 from collections import deque
 from typing import Any
 
+import homeassistant.util.dt as dt_util
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import condition
-import homeassistant.util.dt as dt_util
 
 from .core import pick_state
 from .models import SubjectConfig, collect_for_horizons, collect_for_targets
@@ -259,7 +259,9 @@ class StateEngine:
         # Enter: the condition is true right now. During the reboot bridge, use
         # the for-less twin so a state that held across the reboot re-enters
         # without waiting out its `for:` again.
-        checker = self._instant_checkers.get(name) if bridging else self._checkers.get(name)
+        checker = (
+            self._instant_checkers.get(name) if bridging else self._checkers.get(name)
+        )
         if _run_checker(checker, self.hass):
             return True
         # Everything below only keeps a state we were already in.
@@ -272,8 +274,6 @@ class StateEngine:
             return True
         # Latch: the hold condition keeps it active even though the enter
         # condition has gone false.
-        if state_def.hold is not None and _run_checker(
+        return state_def.hold is not None and _run_checker(
             self._hold_checkers.get(name), self.hass
-        ):
-            return True
-        return False
+        )

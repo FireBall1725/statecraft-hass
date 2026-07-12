@@ -13,7 +13,6 @@ from typing import Any
 
 import voluptuous as vol
 import yaml
-
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, callback
@@ -106,7 +105,10 @@ def ws_people(
 ) -> None:
     """Return all person entities (for reference / source pickers)."""
     people = [
-        {"entity_id": s.entity_id, "name": s.attributes.get("friendly_name", s.entity_id)}
+        {
+            "entity_id": s.entity_id,
+            "name": s.attributes.get("friendly_name", s.entity_id),
+        }
         for s in hass.states.async_all(PERSON_DOMAIN)
     ]
     people.sort(key=lambda p: p["name"])
@@ -161,7 +163,8 @@ async def ws_from_yaml(
         return
     if not cfg:
         connection.send_result(
-            msg["id"], {"builder": {"combine": "or", "sources": []}, "representable": True}
+            msg["id"],
+            {"builder": {"combine": "or", "sources": []}, "representable": True},
         )
         return
     # Decompile from the plain parsed form (validation may coerce for:/entity_id

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 
@@ -27,7 +28,9 @@ def _version() -> str:
     release a fresh URL.
     """
     try:
-        return json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
+        return json.loads((Path(__file__).parent / "manifest.json").read_text())[
+            "version"
+        ]
     except Exception:  # noqa: BLE001 - never let this break panel setup
         return "0"
 
@@ -57,20 +60,18 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         return
 
     if not flags.get("static"):
-        try:
+        # Suppress a re-register error from an earlier setup whose flags were
+        # lost (e.g. the singleton was recreated after the last entry unloaded,
+        # while the static path stayed registered). The path is what we wanted.
+        with contextlib.suppress(RuntimeError, ValueError):
             await hass.http.async_register_static_paths(
                 [StaticPathConfig(JS_URL, str(_JS_FILE), cache_headers=False)]
             )
-        except (RuntimeError, ValueError):
-            # Already registered from an earlier setup whose flags were lost
-            # (e.g. the singleton was recreated after the last entry unloaded,
-            # while the static path stayed registered). Treat as success — the
-            # path is what we wanted anyway.
-            pass
         flags["static"] = True
 
     if not flags.get("panel"):
-        try:
+        # Same lost-flags case: the panel URL path may already be registered.
+        with contextlib.suppress(ValueError):
             await panel_custom.async_register_panel(
                 hass,
                 frontend_url_path=PANEL_URL_PATH,
@@ -82,9 +83,6 @@ async def async_register_panel(hass: HomeAssistant) -> None:
                 config={},
                 embed_iframe=False,
             )
-        except ValueError:
-            # Panel URL path already registered (same lost-flags case).
-            pass
         flags["panel"] = True
 
 

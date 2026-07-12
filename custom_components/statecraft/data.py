@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
@@ -10,8 +11,6 @@ from homeassistant.helpers.storage import Store
 from .const import STORAGE_KEY, STORAGE_VERSION
 
 if TYPE_CHECKING:
-    from homeassistant.core import CALLBACK_TYPE
-
     from .augment import RuntimeListeners
     from .entity import StatecraftScope
     from .evaluator import StateEngine
@@ -23,20 +22,21 @@ class StatecraftData:
     def __init__(self, hass: HomeAssistant) -> None:
         self._hass = hass
         # subject_entity_id -> compiled engine (one config entry per subject)
-        self.engines: dict[str, "StateEngine"] = {}
+        self.engines: dict[str, StateEngine] = {}
         # subject_entity_id -> live listener handles (person scopes)
-        self.runtime: dict[str, "RuntimeListeners"] = {}
+        self.runtime: dict[str, RuntimeListeners] = {}
         # subject_entity_id -> owned entity (custom scopes)
-        self.custom_entities: dict[str, "StatecraftScope"] = {}
+        self.custom_entities: dict[str, StatecraftScope] = {}
         # last composite state per subject, restored across restarts
         self.last_state: dict[str, str] = {}
 
         self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
 
-        # monkeypatch bookkeeping (see augment.py)
+        # monkeypatch bookkeeping (see augment.py). These hold unbound core
+        # Person methods, so they take the entity as first arg, not CALLBACK_TYPE.
         self.patched: bool = False
-        self.orig_update: "CALLBACK_TYPE | None" = None
-        self.orig_added: "CALLBACK_TYPE | None" = None
+        self.orig_update: Callable[..., Any] | None = None
+        self.orig_added: Callable[..., Any] | None = None
 
         # sidebar panel registration flags (see panel.py)
         self.panel_flags: dict[str, bool] = {}
