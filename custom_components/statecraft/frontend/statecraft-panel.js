@@ -137,6 +137,14 @@ class StatecraftPanel extends HTMLElement {
     this._debug = false;
     this._lastSig = "";
     this._debugTimer = null;
+    this._narrow = false;
+  }
+
+  set narrow(v) {
+    const nv = !!v;
+    if (nv === this._narrow) return;
+    this._narrow = nv;
+    if (this._loaded) this.render();
   }
 
   connectedCallback() {
@@ -308,12 +316,13 @@ class StatecraftPanel extends HTMLElement {
   }
 
   _topbar() {
-    // A custom panel gets no HA toolbar, so render our own header with a menu
-    // button; on mobile it's the only way back to the sidebar.
-    return `<div class="topbar">
-      <button class="menu-btn" data-act="menu" title="Open menu">☰</button>
-      <span class="topbar-title">Statecraft</span>
-    </div>`;
+    // A custom panel gets no HA toolbar, so render one that matches HA's own
+    // app header. The menu button only shows on narrow screens (on desktop the
+    // sidebar is docked, same as core pages).
+    const menu = this._narrow
+      ? `<button class="menu-btn" data-act="menu" title="Open menu">☰</button>`
+      : "";
+    return `<div class="topbar">${menu}<span class="topbar-title">Statecraft</span></div>`;
   }
 
   _html() {
@@ -798,13 +807,16 @@ class StatecraftPanel extends HTMLElement {
         color:var(--primary-text-color);
         font-family:var(--paper-font-body1_-_font-family, Roboto, sans-serif); }
       * { box-sizing:border-box; }
-      .topbar { display:flex; align-items:center; gap:10px; margin:0 0 16px; padding:10px 12px;
-        border:1px solid var(--divider-color); background:var(--card-background-color);
-        border-radius:12px; position:sticky; top:8px; z-index:3; }
-      .menu-btn { background:none; border:none; color:var(--primary-text-color); font-size:22px; line-height:1;
-        cursor:pointer; padding:4px 8px; border-radius:8px; }
+      .topbar { display:flex; align-items:center; gap:12px; height:var(--header-height,56px);
+        margin:-16px -16px 16px; padding:0 16px;
+        background:var(--app-header-background-color, var(--primary-background-color));
+        color:var(--app-header-text-color, var(--primary-text-color));
+        border-bottom:1px solid var(--divider-color);
+        position:sticky; top:0; z-index:4; }
+      .menu-btn { background:none; border:none; color:inherit; font-size:22px; line-height:1;
+        cursor:pointer; padding:6px 8px; border-radius:8px; margin-left:-4px; }
       .menu-btn:hover { background:var(--secondary-background-color); }
-      .topbar-title { font-size:16px; font-weight:600; }
+      .topbar-title { font-size:20px; font-weight:400; }
       .wrap { max-width:880px; margin:0 auto; }
       .layout { display:flex; gap:16px; align-items:flex-start; max-width:1120px; margin:0 auto; }
       .people { flex:0 0 240px; display:flex; flex-direction:column; gap:6px;
