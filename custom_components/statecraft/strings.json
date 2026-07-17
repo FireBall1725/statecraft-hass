@@ -60,6 +60,7 @@
         "description": "Name the state and choose how to author its enter condition. The optional hold condition keeps the state active once entered, while it stays true, even after the enter condition goes false (for example: stay 'sleep' until the door opens). Leave it blank for none.",
         "data": {
           "name": "State name",
+          "icon": "State icon (optional)",
           "mode": "Authoring mode",
           "hold": "Hold condition (optional, native HA condition)"
         }

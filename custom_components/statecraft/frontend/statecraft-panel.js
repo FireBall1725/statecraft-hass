@@ -92,6 +92,7 @@ function toEditorState(s) {
   const hasBuilder = !!s.builder;
   return {
     name: s.name || "",
+    icon: s.icon || "",
     mode: hasBuilder ? "builder" : "yaml",
     builder: toBuilder(s.builder),
     yaml: hasBuilder ? "" : JSON.stringify(s.condition ?? {}, null, 2),
@@ -106,7 +107,7 @@ function toEditorState(s) {
 }
 
 function newState() {
-  return { name: "", mode: "builder", builder: { combine: "or", sources: [] }, yaml: "", hold: null };
+  return { name: "", icon: "", mode: "builder", builder: { combine: "or", sources: [] }, yaml: "", hold: null };
 }
 
 function newHold() {
@@ -433,6 +434,10 @@ class StatecraftPanel extends HTMLElement {
         <div class="state-head">
           <span class="pri" title="Priority ${i + 1}. Lower numbers win.">${i + 1}</span>
           <input class="name" data-field="name" data-si="${i}" type="text" placeholder="state name (e.g. sleep)" value="${esc(st.name)}" title="The value the person's state becomes when these rules match">
+          <label class="iconfield" title="Optional mdi icon shown while this state is active. Note: a person with a profile picture keeps showing the picture — the icon appears where no picture is rendered. Leave blank for the default.">
+            <ha-icon class="iconpreview" icon="${esc(st.icon || "mdi:account")}"></ha-icon>
+            <input class="icon-input" data-field="icon" data-si="${i}" type="text" placeholder="mdi:sleep" value="${esc(st.icon)}">
+          </label>
           ${active ? `<span class="livepill" title="This state matches right now">● matching</span>` : ""}
           <div class="grow"></div>
           <div class="mode" title="Author the rule visually (Builder) or paste a raw Home Assistant condition (YAML)">
@@ -807,6 +812,15 @@ class StatecraftPanel extends HTMLElement {
       case "away_state": d.away_state = val; break;
       case "default_state": d.default_state = val; break;
       case "name": st.name = val; break;
+      case "icon":
+        st.icon = val;
+        // Update the preview in place rather than re-rendering the whole panel
+        // for one field. Every other case here leaves rendering to the caller.
+        {
+          const prev = el.parentElement.querySelector(".iconpreview");
+          if (prev) prev.setAttribute("icon", val || "mdi:account");
+        }
+        break;
       case "yaml": if (scope === "hold") st.hold.yaml = val; else st.yaml = val; break;
       case "combine": node.combine = val; break;  // node is the group at path
       case "src_entity": node.entity_id = val; break;
@@ -883,6 +897,9 @@ class StatecraftPanel extends HTMLElement {
         color:var(--text-primary-color,#fff); display:flex; align-items:center; justify-content:center;
         font-size:12px; font-weight:700; flex:none; cursor:help; }
       .name { flex:0 1 240px; font-weight:600; }
+      .iconfield { display:flex; align-items:center; gap:6px; flex:0 1 170px; cursor:help; }
+      .iconfield .iconpreview { color:var(--secondary-text-color); flex:none; --mdc-icon-size:20px; }
+      .icon-input { flex:1 1 auto; min-width:0; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
       .livepill { font-size:11px; font-weight:600; color:var(--success-color,#43a047);
         background:color-mix(in srgb, var(--success-color,#43a047) 14%, transparent);
         border-radius:999px; padding:2px 8px; white-space:nowrap; }

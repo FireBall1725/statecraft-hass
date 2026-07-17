@@ -5,10 +5,18 @@ has moved out from under it — raises a visible Repair instead of failing silen
 from __future__ import annotations
 
 import pytest
-from custom_components.statecraft.augment import install_augmenter, remove_augmenter
+from custom_components.statecraft import const
+from custom_components.statecraft.augment import (
+    _apply_cascade,
+    install_augmenter,
+    remove_augmenter,
+)
 from custom_components.statecraft.const import DOMAIN, ISSUE_PERSON_PATCH
 from custom_components.statecraft.data import StatecraftData
+from custom_components.statecraft.evaluator import StateEngine
+from custom_components.statecraft.models import parse_subject
 from homeassistant.components.person import Person
+from homeassistant.helpers import condition
 from homeassistant.helpers import issue_registry as ir
 
 
@@ -61,3 +69,84 @@ async def test_missing_core_internal_raises_repair_issue(hass, data, monkeypatch
     issue = ir.async_get(hass).async_get_issue(DOMAIN, ISSUE_PERSON_PATCH)
     assert issue is not None
     assert issue.severity is ir.IssueSeverity.ERROR
+
+
+# --- per-state icons --------------------------------------------------------
+class _FakeEntity:
+    """Stands in for a core Person: the cascade only touches _attr_* + write."""
+
+    def __init__(self, hass):
+        self.hass = hass
+        self._attr_state = None
+        self._attr_icon = "mdi:stale"  # so a failure to clear is visible
+        self._attr_extra_state_attributes: dict = {}
+        self.writes = 0
+
+    def async_write_ha_state(self):
+        self.writes += 1
+
+
+async def _engine(hass, states):
+    # Conditions are stored already-validated (the config flow and ws_save both
+    # validate before writing). Validation is what expands entity_id into a
+    # list; skip it and async_from_config walks the string character by
+    # character and every state silently evaluates false.
+    validated = []
+    for raw in states:
+        checked = dict(raw)
+        checked[const.CONF_CONDITION] = await condition.async_validate_condition_config(
+            hass, checked[const.CONF_CONDITION]
+        )
+        validated.append(checked)
+
+    subject = parse_subject(
+        {const.CONF_SUBJECT: "person.a", const.CONF_SCOPE_TYPE: const.SCOPE_PERSON},
+        {const.CONF_STATES: validated},
+    )
+    engine = StateEngine(hass, subject)
+    await engine.async_build()  # compiles the condition checkers
+    return engine
+
+
+def _state_def(name, entity_id, icon=None):
+    raw = {
+        const.CONF_NAME: name,
+        const.CONF_CONDITION: {
+            "condition": "state",
+            "entity_id": entity_id,
+            "state": "on",
+        },
+    }
+    if icon:
+        raw[const.CONF_ICON] = icon
+    return raw
+
+
+async def test_cascade_sets_icon_of_winning_state(hass, data):
+    hass.states.async_set("input_boolean.sleep", "on")
+    await hass.async_block_till_done()
+    engine = await _engine(
+        hass, [_state_def("sleep", "input_boolean.sleep", "mdi:sleep")]
+    )
+    entity = _FakeEntity(hass)
+
+    _apply_cascade(entity, engine, "home", None)
+
+    assert entity._attr_state == "sleep"
+    assert entity._attr_icon == "mdi:sleep"
+
+
+async def test_cascade_clears_icon_when_state_has_none(hass, data):
+    """Falling back to presence must not leave the previous state's icon."""
+    hass.states.async_set("input_boolean.sleep", "off")
+    await hass.async_block_till_done()
+    engine = await _engine(
+        hass, [_state_def("sleep", "input_boolean.sleep", "mdi:sleep")]
+    )
+    entity = _FakeEntity(hass)
+
+    _apply_cascade(entity, engine, "home", None)
+
+    assert entity._attr_state == "home"
+    # None, not "": lets the person domain's icons.json default apply.
+    assert entity._attr_icon is None

@@ -22,7 +22,10 @@ CONF_SUBJECT: Final = (
     "subject"  # the entity: person.* (person) or statecraft.* (custom)
 )
 CONF_SCOPE_NAME: Final = "scope_name"  # friendly name for a custom scope
-CONF_ICON: Final = "icon"  # optional mdi icon for a custom scope entity
+# Optional mdi icon. Scope-level (entry.data) it is the custom scope entity's
+# base icon; inside a state definition it is that state's icon. The two live in
+# different dicts, so the same key cannot collide.
+CONF_ICON: Final = "icon"
 CONF_DEFAULT_STATE: Final = "default_state"  # custom fallback when nothing matches
 CONF_AWAY_FROM: Final = "away_from"  # presence value treated as "gone" (person)
 CONF_AWAY_STATE: Final = "away_state"  # what to call it (person)
@@ -31,6 +34,7 @@ CONF_STATES: Final = "states"  # ordered list of state definitions
 # Per-state-definition keys
 CONF_NAME: Final = "name"
 CONF_CONDITION: Final = "condition"  # native HA condition config
+# A state may also carry CONF_ICON (see above).
 
 # Latch: once the state is active, it stays active while this native HA
 # condition is true, even after the enter condition goes false. Generic

@@ -27,6 +27,40 @@ def test_parse_person_subject():
     assert len(subj.states) == 1
     assert subj.states[0].name == "sleep"
     assert subj.states[0].hold is None
+    assert subj.states[0].icon is None
+
+
+def _icon_subject(*states):
+    return parse_subject(
+        {const.CONF_SUBJECT: "person.a", const.CONF_SCOPE_TYPE: const.SCOPE_PERSON},
+        {const.CONF_STATES: list(states)},
+    )
+
+
+def test_parse_state_icon():
+    cond = {"condition": "state", "entity_id": "x.y", "state": "on"}
+    subj = _icon_subject(_state("sleep", cond, icon="mdi:sleep"))
+    assert subj.states[0].icon == "mdi:sleep"
+    assert subj.state_icon("sleep") == "mdi:sleep"
+
+
+def test_state_icon_absent_or_blank_is_none():
+    """A missing key and an empty string both mean 'no opinion', not ''.
+
+    An empty string would reach attributes.icon and shadow the domain default.
+    """
+    cond = {"condition": "state", "entity_id": "x.y", "state": "on"}
+    subj = _icon_subject(_state("sleep", cond), _state("dnd", cond, icon=""))
+    assert subj.state_icon("sleep") is None
+    assert subj.state_icon("dnd") is None
+
+
+def test_state_icon_unknown_name_is_none():
+    """Fallback states (away/home/zone names) have no StateDef."""
+    cond = {"condition": "state", "entity_id": "x.y", "state": "on"}
+    subj = _icon_subject(_state("sleep", cond, icon="mdi:sleep"))
+    assert subj.state_icon("away") is None
+    assert subj.state_icon("home") is None
 
 
 def test_parse_custom_subject_defaults():

@@ -38,6 +38,10 @@ The builder handles what HA users actually write: entity rows tested with `is` /
 
 A state is active when its enter condition is true, or when it was already active and its hold condition is still true. That second clause is generic hysteresis: the state stays latched until a condition you choose breaks it. To keep a person `sleep` in the morning until they open the door, the enter condition is "sleep window on and door closed" and the hold condition is "door closed". When the door opens, the hold goes false and the state drops.
 
+Each state can also carry an mdi icon, set beside the state name. While that state is active, the subject's `icon` attribute reads what you set, so `sleep` shows `mdi:sleep` instead of the stock `mdi:account`. Leave it blank and Home Assistant's own default applies.
+
+The icon doesn't overlay a profile picture. Home Assistant's `state-badge` drops the icon whenever `entity_picture` is set, so a person with a photo keeps showing the photo, and the icon lands on cards that render no picture, such as a tile card with `show_entity_picture` off. The little away badge on a tile card is a separate mechanism: `tile-badge-person.ts` picks between `mdi:home` and `mdi:home-export-outline` in hardcoded frontend code that reads no entity attribute, so no icon set here can change it.
+
 The panel shows a plain-language summary of each rule and a **Debug** toggle that reports every row's live value, whether it passes, any `for:` countdown, and the engine's verdict for each state.
 
 ## How it works
@@ -55,6 +59,7 @@ person.adalea
   state: sleep            # sleep | dnd | away | home | <zone name>
   attributes:
     presence: home        # raw person state before the cascade
+    icon: mdi:sleep       # the active state's icon, if it set one
     sleep: true
     dnd: false
 ```

@@ -134,6 +134,10 @@ class StatecraftScope(RestoreEntity):
             # No presence for a custom scope; pick_state falls back to default.
             state, active = self._engine.evaluate(None, self._state)
             self._state = state
+            # Per-state icon wins; otherwise fall back to the scope's own icon.
+            self._attr_icon = (
+                self._subject.state_icon(state) or self._subject.icon or DEFAULT_ICON
+            )
             attrs: dict[str, Any] = dict(active)
             attrs["options"] = self._options()
             self._attrs = attrs

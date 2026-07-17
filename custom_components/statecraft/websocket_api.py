@@ -217,6 +217,12 @@ def _build_state(raw: dict[str, Any]) -> dict[str, Any]:
     if enter_builder is not None:
         state[CONF_BUILDER] = enter_builder
 
+    # Optional per-state icon. Blank means "no icon", so drop the key entirely
+    # rather than storing "" and shadowing the domain default.
+    icon = (raw.get(CONF_ICON) or "").strip()
+    if icon:
+        state[CONF_ICON] = icon
+
     # Optional hold (latch) condition, authored the same way as the enter one.
     hold_raw = raw.get(CONF_HOLD)
     if hold_raw:

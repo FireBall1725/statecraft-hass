@@ -269,6 +269,7 @@ class StatecraftOptionsFlow(OptionsFlow):
     def _new_draft(self) -> dict[str, Any]:
         return {
             CONF_NAME: "",
+            CONF_ICON: None,
             F_MODE: MODE_BUILDER,
             CONF_CONDITION: None,
             CONF_BUILDER: {B_COMBINE: COMBINE_ANY, B_SOURCES: []},
@@ -279,6 +280,7 @@ class StatecraftOptionsFlow(OptionsFlow):
         builder = state.get(CONF_BUILDER)
         return {
             CONF_NAME: state.get(CONF_NAME, ""),
+            CONF_ICON: state.get(CONF_ICON),
             F_MODE: MODE_BUILDER if builder else MODE_YAML,
             CONF_CONDITION: state.get(CONF_CONDITION),
             CONF_BUILDER: builder or {B_COMBINE: COMBINE_ANY, B_SOURCES: []},
@@ -290,6 +292,8 @@ class StatecraftOptionsFlow(OptionsFlow):
             CONF_NAME: self._draft[CONF_NAME],
             CONF_CONDITION: self._draft[CONF_CONDITION],
         }
+        if self._draft.get(CONF_ICON):
+            state[CONF_ICON] = self._draft[CONF_ICON]
         if self._draft[F_MODE] == MODE_BUILDER:
             state[CONF_BUILDER] = self._draft[CONF_BUILDER]
         if self._draft.get(CONF_HOLD):
@@ -370,6 +374,7 @@ class StatecraftOptionsFlow(OptionsFlow):
                     errors[F_HOLD] = "invalid_condition"
             if not errors:
                 self._draft[CONF_NAME] = user_input[CONF_NAME].strip()
+                self._draft[CONF_ICON] = user_input.get(CONF_ICON) or None
                 self._draft[F_MODE] = user_input[F_MODE]
                 self._draft[CONF_HOLD] = hold_cfg
                 if self._draft[F_MODE] == MODE_YAML:
@@ -387,6 +392,12 @@ class StatecraftOptionsFlow(OptionsFlow):
         return vol.Schema(
             {
                 vol.Required(CONF_NAME, default=d.get(CONF_NAME, "")): _TEXT,
+                # suggested_value rather than default: an optional field with a
+                # None default fails validation, and this prefills on edit.
+                vol.Optional(
+                    CONF_ICON,
+                    description={"suggested_value": d.get(CONF_ICON)},
+                ): selector.IconSelector(),
                 vol.Required(F_MODE, default=d.get(F_MODE, MODE_BUILDER)): _MODE_FIELD,
                 vol.Optional(F_HOLD, default=hold_default): _YAML_FIELD,
             }

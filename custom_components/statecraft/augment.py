@@ -223,12 +223,17 @@ def _apply_cascade(
                 sorted(engine.entities),
             )
         entity._attr_state = presence
+        entity._attr_icon = None  # plain presence: don't leave a state icon behind
         entity.async_write_ha_state()
         return
 
     state, active = engine.evaluate(presence, previous_state)
 
     entity._attr_state = state
+    # None clears any previous state's icon and lets the person domain's
+    # icons.json default apply. Core's Person never sets _attr_icon, so this
+    # field is ours alone.
+    entity._attr_icon = engine.subject.state_icon(state)
 
     attrs = dict(getattr(entity, "_attr_extra_state_attributes", None) or {})
     attrs[ATTR_PRESENCE] = presence

@@ -51,11 +51,15 @@ class StateDef:
     stays active while `hold` is true even after `condition` (the enter
     condition) goes false. That is the whole hysteresis story — no built-in
     notion of doors, windows, or time; the user wires it to their own flow.
+
+    `icon` is optional. None means "no opinion", which lets the frontend fall
+    back to the domain default (mdi:account for a person).
     """
 
     name: str
     condition: dict[str, Any]
     hold: dict[str, Any] | None
+    icon: str | None = None
 
 
 @dataclass(frozen=True)
@@ -76,6 +80,18 @@ class SubjectConfig:
     @property
     def is_custom(self) -> bool:
         return self.scope_type != SCOPE_PERSON
+
+    def state_icon(self, state: str) -> str | None:
+        """Return the icon for a state name, or None if it has no opinion.
+
+        Fallback states (away_state, default_state, and pass-through presence
+        values like "home" or a zone name) have no StateDef, so they land here
+        as None and the frontend applies the domain default.
+        """
+        for sd in self.states:
+            if sd.name == state:
+                return sd.icon
+        return None
 
 
 def _legacy_hold(raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -163,6 +179,7 @@ def parse_subject(data: dict[str, Any], options: dict[str, Any]) -> SubjectConfi
             name=raw[CONF_NAME],
             condition=raw[CONF_CONDITION],
             hold=_parse_hold(raw),
+            icon=raw.get(CONF_ICON) or None,
         )
         for raw in merged.get(CONF_STATES, [])
     )
