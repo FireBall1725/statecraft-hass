@@ -17,5 +17,5 @@
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/fireball1725/statecraft-hass/issues",
   "requirements": [],
-  "version": "0.9.1"
+  "version": "0.10.0"
 }

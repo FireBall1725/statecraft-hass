@@ -9,6 +9,9 @@ DOMAIN: Final = "statecraft"
 # Core integration we augment. We do not own the person entity; we layer state
 # and attributes onto it. Keep in sync with HA's person component domain.
 PERSON_DOMAIN: Final = "person"
+# A person in a sub-zone reports that zone's name as its state; we read the
+# zone's icon back for the composite state (see augment._zone_icon).
+ZONE_DOMAIN: Final = "zone"
 
 # --- Config entry keys ------------------------------------------------------
 # A "scope" is one config entry: a subject plus its ordered states. Two kinds:
@@ -64,6 +67,9 @@ DEFAULT_AWAY_FROM: Final = "not_home"
 DEFAULT_AWAY_STATE: Final = "away"
 DEFAULT_STATE: Final = "idle"  # custom scope fallback
 DEFAULT_ICON: Final = "mdi:state-machine"
+# Icon for the away state. Core `person` maps the literal `not_home` to this in
+# its icons.json; renaming not_home -> away loses that, so we restore it.
+DEFAULT_AWAY_ICON: Final = "mdi:account-arrow-right"
 DEFAULT_OPEN_STATE: Final = "on"
 DEFAULT_CLOSED_STATE: Final = "off"
 DEFAULT_WINDOW_OFF_STATE: Final = "off"

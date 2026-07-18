@@ -17,6 +17,7 @@ import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from homeassistant.const import ATTR_FRIENDLY_NAME, ATTR_ICON
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import (
@@ -27,15 +28,18 @@ from homeassistant.helpers.event import (
 
 from .const import (
     ATTR_PRESENCE,
+    DEFAULT_AWAY_ICON,
     DOMAIN,
     ISSUE_PERSON_PATCH,
     PERSON_DOMAIN,
     SAFETY_REEVAL_SECONDS,
+    ZONE_DOMAIN,
 )
 
 if TYPE_CHECKING:
     from .data import StatecraftData
     from .evaluator import StateEngine
+    from .models import SubjectConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -182,6 +186,39 @@ def remove_augmenter(hass: HomeAssistant) -> None:
     data.orig_added = None
 
 
+# --- icon resolution --------------------------------------------------------
+@callback
+def _zone_icon(hass: HomeAssistant, state: str) -> str | None:
+    """Icon of the zone whose friendly_name equals the state, if any.
+
+    A person in a sub-zone reports that zone's name as its state (core sets it),
+    so `Karate (Cambridge)` matches `zone.karate`'s friendly_name. This mirrors
+    what HA's own person tile badge does (tile-badge-person.ts).
+    """
+    for st in hass.states.async_all(ZONE_DOMAIN):
+        if st.attributes.get(ATTR_FRIENDLY_NAME) == state:
+            return st.attributes.get(ATTR_ICON)
+    return None
+
+
+@callback
+def _resolve_icon(
+    hass: HomeAssistant, subject: SubjectConfig, state: str
+) -> str | None:
+    """Pick the icon for a composite state.
+
+    Order: a named state's own icon wins; then the away state gets HA's away
+    glyph (renaming not_home -> away lost it); then a zone pass-through borrows
+    that zone's icon. None means "no opinion" -> HA falls back to mdi:account.
+    """
+    icon = subject.state_icon(state)
+    if icon:
+        return icon
+    if state == subject.away_state:
+        return DEFAULT_AWAY_ICON
+    return _zone_icon(hass, state)
+
+
 # --- cascade application ----------------------------------------------------
 @callback
 def _apply_cascade(
@@ -233,7 +270,7 @@ def _apply_cascade(
     # None clears any previous state's icon and lets the person domain's
     # icons.json default apply. Core's Person never sets _attr_icon, so this
     # field is ours alone.
-    entity._attr_icon = engine.subject.state_icon(state)
+    entity._attr_icon = _resolve_icon(hass, engine.subject, state)
 
     attrs = dict(getattr(entity, "_attr_extra_state_attributes", None) or {})
     attrs[ATTR_PRESENCE] = presence

@@ -150,3 +150,48 @@ async def test_cascade_clears_icon_when_state_has_none(hass, data):
     assert entity._attr_state == "home"
     # None, not "": lets the person domain's icons.json default apply.
     assert entity._attr_icon is None
+
+
+async def test_cascade_away_state_gets_away_icon(hass, data):
+    """Renaming not_home -> away lost HA's away glyph; the fallback restores it."""
+    engine = await _engine(hass, [])  # no named states, pure presence fallback
+    entity = _FakeEntity(hass)
+
+    _apply_cascade(entity, engine, "not_home", None)  # away_from default
+
+    assert entity._attr_state == "away"
+    assert entity._attr_icon == "mdi:account-arrow-right"
+
+
+async def test_cascade_zone_passthrough_borrows_zone_icon(hass, data):
+    """A person in a sub-zone reports the zone name; use that zone's icon."""
+    hass.states.async_set(
+        "zone.karate",
+        "0",
+        {"friendly_name": "Karate (Cambridge)", "icon": "mdi:karate"},
+    )
+    await hass.async_block_till_done()
+    engine = await _engine(hass, [])
+    entity = _FakeEntity(hass)
+
+    _apply_cascade(entity, engine, "Karate (Cambridge)", None)
+
+    assert entity._attr_state == "Karate (Cambridge)"
+    assert entity._attr_icon == "mdi:karate"
+
+
+async def test_cascade_zone_without_icon_falls_through(hass, data):
+    """A matching zone with no icon attribute leaves the default in place."""
+    hass.states.async_set(
+        "zone.work",
+        "0",
+        {"friendly_name": "Work"},  # no icon
+    )
+    await hass.async_block_till_done()
+    engine = await _engine(hass, [])
+    entity = _FakeEntity(hass)
+
+    _apply_cascade(entity, engine, "Work", None)
+
+    assert entity._attr_state == "Work"
+    assert entity._attr_icon is None

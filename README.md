@@ -40,6 +40,8 @@ A state is active when its enter condition is true, or when it was already activ
 
 Each state can also carry an mdi icon, picked beside the state name with Home Assistant's own icon picker, so you can search "bed" and see every match rendered rather than typing `mdi:` names from memory. While that state is active, the subject's `icon` attribute reads what you set, so `sleep` shows `mdi:sleep` instead of the stock `mdi:account`. Leave it blank and Home Assistant's own default applies.
 
+States you don't name still get a sensible icon. The away state shows `mdi:account-arrow-right`, the glyph Home Assistant uses for `not_home` before the rename to `away` hides it. A person inside a sub-zone borrows that zone's icon, so someone at a zone called "Karate" shows the karate icon; this reads the zone's `friendly_name` against the person's state, the same match Home Assistant's own person tile badge uses. A named state's own icon always wins over both.
+
 The icon doesn't overlay a profile picture. Home Assistant's `state-badge` drops the icon whenever `entity_picture` is set, so a person with a photo keeps showing the photo, and the icon lands on cards that render no picture, such as a tile card with `show_entity_picture` off. The little away badge on a tile card is a separate mechanism: `tile-badge-person.ts` picks between `mdi:home` and `mdi:home-export-outline` in hardcoded frontend code that reads no entity attribute, so no icon set here can change it.
 
 The panel shows a plain-language summary of each rule and a **Debug** toggle that reports every row's live value, whether it passes, any `for:` countdown, and the engine's verdict for each state.
